@@ -31,10 +31,6 @@ pub async fn start_p2p_server(addr: String) {
             .unwrap()
     );
 
-    println!("addr: {}", listener.local_addr().unwrap());
-
-    // let (tx, mut _rx) = mpsc::unbounded_channel::<String>();
-
     // Spawn a task to handle incoming messages
     tokio::spawn(handle_incoming_messages(listener.clone(), peers.clone()));
 
