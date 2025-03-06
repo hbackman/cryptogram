@@ -9,8 +9,8 @@ use serde_json;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MessageType {
     Chat,
-    PeerDiscoveryRequest,
-    PeerDiscoveryReply,
+    PeerDiscovery,
+    PeerGossip,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -57,7 +57,7 @@ async fn handle_interactive_input(listener: Arc<TcpListener>, peers: Arc<Mutex<H
                     peers.lock().await.insert(peer.clone());
 
                     let discovery_request = Message {
-                        msg_type: MessageType::PeerDiscoveryRequest,
+                        msg_type: MessageType::PeerDiscovery,
                         sender: listener.local_addr().unwrap().to_string(),
                         payload: "".to_string(),
                     };
@@ -116,23 +116,23 @@ async fn handle_client(socket: TcpStream, peer_addr: String, peers: Arc<Mutex<Ha
 
     while reader.read_line(&mut buffer).await.unwrap() > 0 {
         if let Ok(message) = serde_json::from_str::<Message>(&buffer.trim()) {
+            peers.lock().await.insert(message.sender.clone());
+
             match message.msg_type {
                 MessageType::Chat => {
                     println!("[{}] {}", message.sender, message.payload);
                 }
-                MessageType::PeerDiscoveryRequest => {
+                MessageType::PeerDiscovery => {
                     send_message(&message.sender, &Message{
-                        msg_type: MessageType::PeerDiscoveryReply,
+                        msg_type: MessageType::PeerGossip,
                         sender: "127.0.0.1:5002".to_string(),
                         payload: get_peers_json(peers.clone()).await.to_string(),
                     }).await;
                 }
-                MessageType::PeerDiscoveryReply => {
+                MessageType::PeerGossip => {
                     println!("discovery reply: {}", message.payload);
+                    merge_peers(peers.clone(), &message.payload).await;
                 }
-                // _ => {
-                //     println!("Unhandled message type.");
-                // }
             }
         }
         buffer.clear();
@@ -171,4 +171,21 @@ async fn get_peers_json(peers: Arc<Mutex<HashSet<String>>>) -> String {
         .cloned()
         .collect::<Vec<String>>()
     ).unwrap()
+}
+
+async fn merge_peers(peers: Arc<Mutex<HashSet<String>>>, json_peers: &str) {
+    match serde_json::from_str::<Vec<String>>(json_peers) {
+        Ok(new_peers) => {
+            let mut peers_guard = peers.lock().await;
+            for peer in new_peers {
+                if !peers_guard.contains(&peer) {
+                    println!("Discovered new peer: {}", peer);
+                    peers_guard.insert(peer);
+                }
+            }
+        }
+        Err(e) => {
+            println!("Failed to parse peer list: {}", e);
+        }
+    }
 }
