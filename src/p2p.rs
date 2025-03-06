@@ -1,6 +1,5 @@
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::sync::mpsc;
 use std::sync::Arc;
 use std::collections::HashSet;
 use tokio::sync::Mutex;
@@ -10,7 +9,8 @@ use serde_json;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum MessageType {
     Chat,
-    PeerDiscovery,
+    PeerDiscoveryRequest,
+    PeerDiscoveryReply,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -54,13 +54,31 @@ async fn handle_interactive_input(listener: Arc<TcpListener>, peers: Arc<Mutex<H
                 if let Ok(stream) = TcpStream::connect(&peer).await {
                     println!("Connected to {}", peer);
 
-                    peers.lock()
-                        .await
-                        .insert(peer);
+                    peers.lock().await.insert(peer.clone());
+
+                    let discovery_request = Message {
+                        msg_type: MessageType::PeerDiscoveryRequest,
+                        sender: listener.local_addr().unwrap().to_string(),
+                        payload: "".to_string(),
+                    };
+
+                    send_message(&peer, &discovery_request).await;
 
                     drop(stream);
                 } else {
                     println!("Could not connect to peer: {}", peer);
+                }
+            }
+            ["/peers"] => {
+                let peers_guard = peers.lock().await;
+
+                if peers_guard.is_empty() {
+                    println!("No connected peers.");
+                } else {
+                    println!("Connected peers:");
+                    for peer in peers_guard.iter() {
+                        println!("- {}", peer);
+                    }
                 }
             }
             ["/send", message @ ..] => {
@@ -74,6 +92,7 @@ async fn handle_interactive_input(listener: Arc<TcpListener>, peers: Arc<Mutex<H
                 println!("Commands:");
                 println!("  /connect <IP:PORT> - Manually connect to a peer");
                 println!("  /send <MESSAGE> - Broadcast a message to all peers");
+                println!("  /peers - List connected peers");
             }
         }
     }
@@ -96,7 +115,26 @@ async fn handle_client(socket: TcpStream, peer_addr: String, peers: Arc<Mutex<Ha
     println!("peer connected: {}", peer_addr);
 
     while reader.read_line(&mut buffer).await.unwrap() > 0 {
-        println!("[{}] {}", peer_addr, buffer.trim());
+        if let Ok(message) = serde_json::from_str::<Message>(&buffer.trim()) {
+            match message.msg_type {
+                MessageType::Chat => {
+                    println!("[{}] {}", message.sender, message.payload);
+                }
+                MessageType::PeerDiscoveryRequest => {
+                    send_message(&message.sender, &Message{
+                        msg_type: MessageType::PeerDiscoveryReply,
+                        sender: "127.0.0.1:5002".to_string(),
+                        payload: get_peers_json(peers.clone()).await.to_string(),
+                    }).await;
+                }
+                MessageType::PeerDiscoveryReply => {
+                    println!("discovery reply: {}", message.payload);
+                }
+                // _ => {
+                //     println!("Unhandled message type.");
+                // }
+            }
+        }
         buffer.clear();
     }
 }
@@ -122,4 +160,15 @@ async fn send_message(peer: &str, message: &Message) {
     } else {
         println!("Could not connect to peer: {}", peer);
     }
+}
+
+async fn get_peers_json(peers: Arc<Mutex<HashSet<String>>>) -> String {
+    let peers_guard = peers.lock().await;
+
+    // Convert to JSON
+    serde_json::to_string(&peers_guard
+        .iter()
+        .cloned()
+        .collect::<Vec<String>>()
+    ).unwrap()
 }
