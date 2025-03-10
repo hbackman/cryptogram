@@ -8,8 +8,9 @@ pub enum MessageType {
   PeerDiscovery,
   PeerGossip,
   // Blockchain
-  GetBlockchainHeaders,
-  GetBlockchainData,
+  BlockchainRequest,
+  BlockchainReply,
+  BlockchainTx,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

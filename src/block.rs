@@ -1,8 +1,8 @@
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
   pub index:     u64,
   pub timestamp: u64,
@@ -44,6 +44,14 @@ impl Block {
     hasher.update(&self.prev_hash);
     format!("{:x}", hasher.finalize())
   }
+
+
+  /**
+   * Serialize to json.
+   */
+  pub fn to_json(&self) -> String {
+    serde_json::to_string(&self).unwrap()
+  }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -68,6 +76,8 @@ impl Blockchain {
   pub fn add_block(&mut self, block: Block) {
     if self.validate_block(&block) {
       self.chain.push(block);
+    } else {
+      println!("Invalid block: {:?}", block);
     }
   }
 
@@ -81,5 +91,25 @@ impl Blockchain {
    */
   pub fn latest_block(&self) -> &Block {
     self.chain.last().unwrap()
+  }
+
+  /**
+   * Serialize to json.
+   */
+  pub fn to_json(&self, pretty: bool) -> String {
+    if pretty {
+      serde_json::to_string_pretty(&self.chain).unwrap()
+    } else {
+      serde_json::to_string(&self.chain).unwrap()
+    }
+  }
+
+  /**
+   * Update the blockchain.
+   */
+  pub fn update(&mut self, chain: Vec<Block>) {
+    if chain.len() > self.chain.len() {
+      self.chain = chain;
+    }
   }
 }

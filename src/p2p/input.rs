@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use crate::block::Block;
 use crate::p2p::node::Node;
 use crate::p2p::message::{Message, MessageType};
 
@@ -45,22 +46,33 @@ pub async fn handle_user_input(node: Arc<Node>) {
         }).await;
       },
       ["/sync"] => {
-        // let chain = node.chain.lock().await;
-        // let block = chain.latest_block();
+        let peer = node.get_random_peer().await.unwrap();
 
-        // node.yell(&Message{
-        //   msg_type: MessageType::BlockchainSync,
-        //   sender: node.get_local_addr(),
-        //   payload: serde_json::to_string(&block).unwrap(),
-        // });
-
-        node.yell(&Message{
-          msg_type: MessageType::GetBlockchainHeaders,
+        node.send(&peer, &Message{
+          msg_type: MessageType::BlockchainRequest,
           sender: node.get_local_addr(),
           payload: "".to_string(),
         }).await;
 
         println!("requesting blockchain sync");
+      },
+      ["/tx", message @ ..] => {
+        println!("broadcasting new block");
+
+        let mut chain = node.chain.lock().await;
+        let block = Block::next(chain.latest_block(), message.join(" "));
+
+        chain.add_block(block.clone());
+
+        node.yell(&Message{
+          msg_type: MessageType::BlockchainTx,
+          sender: node.get_local_addr(),
+          payload: block.to_json(),
+        }).await;
+      },
+      ["/chain"] => {
+        let chain = node.chain.lock().await.to_json(true);
+        println!("{}", chain);
       },
       _ => {
         println!("Commands:");

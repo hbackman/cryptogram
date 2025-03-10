@@ -4,10 +4,11 @@ use tokio::sync::Mutex;
 use serde_json;
 use std::sync::Arc;
 use std::collections::HashSet;
+use rand::seq::IteratorRandom;
 use crate::p2p::message::{Message, MessageType};
 use crate::p2p::gossip;
 use crate::p2p::input;
-use crate::block::Blockchain;
+use crate::block::{Block, Blockchain};
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -58,6 +59,16 @@ impl Node {
       .iter()
       .cloned()
       .collect()
+  }
+
+  /**
+   * Retrive a random peer.
+   */
+  pub async fn get_random_peer(&self) -> Option<String> {
+      let peers_guard = self.peers.lock().await;
+
+      // Pick a random peer from the HashSet
+      peers_guard.iter().choose(&mut rand::thread_rng()).cloned()
   }
 
   /**
@@ -158,6 +169,48 @@ async fn handle_message(node: Arc<Node>, message: Message) {
           println!("Failed to parse peer list: {}", e);
         }
       }
+    },
+    MessageType::BlockchainRequest => {
+      println!("BlockchainRequest");
+
+      let chain = node.chain.lock().await;
+
+      node.send(&message.sender, &Message{
+        msg_type: MessageType::BlockchainReply,
+        sender: node.get_local_addr(),
+        payload: chain.to_json(false),
+      }).await;
+    },
+    MessageType::BlockchainReply => {
+      println!("BlockchainReply");
+
+      match serde_json::from_str::<Vec<Block>>(&message.payload) {
+        Ok(new_chain) => {
+          node.chain.lock()
+            .await
+            .update(new_chain);
+
+          println!("Updated blockchain.");
+        }
+        Err(e) => {
+          println!("Failed to parse blockchain: {}", e);
+        }
+      }
+    },
+    MessageType::BlockchainTx => {
+      println!("BlockchainTx");
+
+       match serde_json::from_str::<Block>(&message.payload) {
+         Ok(block) => {
+           node.chain
+             .lock()
+             .await
+             .add_block(block);
+         },
+         Err(e) => {
+           println!("Failed to parse block: {}", e);
+         }
+       }
     },
     _ => {}
   }
