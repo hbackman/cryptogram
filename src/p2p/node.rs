@@ -7,10 +7,12 @@ use std::collections::HashSet;
 use crate::p2p::message::{Message, MessageType};
 use crate::p2p::gossip;
 use crate::p2p::input;
+use crate::block::Blockchain;
 
 #[derive(Debug, Clone)]
 pub struct Node {
   pub peers:    Arc<Mutex<HashSet<String>>>,
+  pub chain:    Arc<Mutex<Blockchain>>,
   pub listener: Arc<TcpListener>,
 }
 
@@ -24,6 +26,7 @@ impl Node {
 
     Node {
       peers: Arc::new(Mutex::new(HashSet::new())),
+      chain: Arc::new(Mutex::new(Blockchain::new())),
       listener: Arc::new(listener),
     }
   }
@@ -35,6 +38,9 @@ impl Node {
       .to_string()
   }
 
+  /**
+   * Register a node peer.
+   */
   pub async fn add_peer(&self, peer: &str) {
     let mut peers_guard = self.peers.lock().await;
 
@@ -44,6 +50,9 @@ impl Node {
     }
   }
 
+  /**
+   * Retrieve the node peers.
+   */
   pub async fn get_peers(&self) -> Vec<String> {
     self.peers.lock().await
       .iter()
@@ -51,7 +60,9 @@ impl Node {
       .collect()
   }
 
-  // Send message to a peer.
+  /**
+   * Send message to a peer.
+   */
   pub async fn send(&self, peer: &str, message: &Message) {
     if let Ok(mut stream) = TcpStream::connect(peer).await {
       let json_msg = serde_json::to_string(&message).unwrap();
@@ -66,7 +77,9 @@ impl Node {
     }
   }
 
-  // Send message to all peers.
+  /**
+   * Send message to all peers.
+   */
   pub async fn yell(&self, message: &Message) {
     let peers = self.peers.lock().await.clone();
     for peer in peers.iter() {
@@ -75,6 +88,9 @@ impl Node {
   }
 }
 
+/**
+ * Start the p2p node.
+ */
 pub async fn start_p2p_node(addr: String) {
   let node = Arc::new(Node::new(addr).await);
 
@@ -83,7 +99,9 @@ pub async fn start_p2p_node(addr: String) {
   tokio::spawn(input::handle_user_input(node.clone())).await.unwrap();
 }
 
-// Handle incoming messages and track peers
+/**
+ * Handle incoming messages and track peers.
+ */
 async fn handle_incoming_messages(node: Arc<Node>) {
   loop {
     let (socket, _) = node.listener.accept().await.unwrap();
@@ -91,7 +109,9 @@ async fn handle_incoming_messages(node: Arc<Node>) {
   }
 }
 
-// Read messages from a connected peer
+/**
+ * Read messages from a connected peer.
+ */
 async fn handle_client(node: Arc<Node>, socket: TcpStream) {
   let mut reader = BufReader::new(socket);
   let mut buffer = String::new();
@@ -108,6 +128,9 @@ async fn handle_client(node: Arc<Node>, socket: TcpStream) {
   }
 }
 
+/**
+ * Handle a peer message.
+ */
 async fn handle_message(node: Arc<Node>, message: Message) {
   match message.msg_type {
     MessageType::Chat => {
@@ -135,6 +158,7 @@ async fn handle_message(node: Arc<Node>, message: Message) {
           println!("Failed to parse peer list: {}", e);
         }
       }
-    }
+    },
+    _ => {}
   }
 }

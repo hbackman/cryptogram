@@ -40,15 +40,34 @@ pub async fn handle_user_input(node: Arc<Node>) {
       ["/send", message @ ..] => {
         node.yell(&Message{
           msg_type: MessageType::Chat,
-          sender: node.listener.local_addr().unwrap().to_string(),
+          sender: node.get_local_addr(),
           payload: message.join(" "),
         }).await;
-      }
+      },
+      ["/sync"] => {
+        // let chain = node.chain.lock().await;
+        // let block = chain.latest_block();
+
+        // node.yell(&Message{
+        //   msg_type: MessageType::BlockchainSync,
+        //   sender: node.get_local_addr(),
+        //   payload: serde_json::to_string(&block).unwrap(),
+        // });
+
+        node.yell(&Message{
+          msg_type: MessageType::GetBlockchainHeaders,
+          sender: node.get_local_addr(),
+          payload: "".to_string(),
+        }).await;
+
+        println!("requesting blockchain sync");
+      },
       _ => {
         println!("Commands:");
         println!("  /connect <IP:PORT> - Manually connect to a peer");
         println!("  /send <MESSAGE> - Broadcast a message to all peers");
         println!("  /peers - List connected peers");
+        println!("  /sync - Sync the blockchain");
       }
     }
   }
