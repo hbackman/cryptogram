@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct Block {
   pub index:     u64,
   pub timestamp: u64,
+  pub nonce:     u64,
   pub data:      String,
   pub prev_hash: String,
   pub hash:      String,
@@ -21,6 +22,7 @@ impl Block {
     let mut block = Block {
       index,
       timestamp,
+      nonce: 0,
       data,
       prev_hash: previous_hash.clone(),
       hash: String::new(), // placeholder
@@ -40,11 +42,25 @@ impl Block {
     let mut hasher = Sha256::new();
     hasher.update(self.index.to_string());
     hasher.update(self.timestamp.to_string());
+    hasher.update(self.nonce.to_string());
     hasher.update(&self.data);
     hasher.update(&self.prev_hash);
     format!("{:x}", hasher.finalize())
   }
 
+  /**
+   * Mine the block until the hash hits the difficulty.
+   */
+  pub fn mine_block(&mut self) {
+    let target = "00000";
+
+    while !self.hash.starts_with(target) {
+      self.nonce += 1;
+      self.hash = self.hash_block();
+    }
+
+    println!("Block mined! Nonce: {}, Hash: {}", self.nonce, self.hash);
+  }
 
   /**
    * Serialize to json.
@@ -82,8 +98,10 @@ impl Blockchain {
   }
 
   fn validate_block(&self, block: &Block) -> bool {
+    let target = "00000";
+
     let last_block = self.latest_block();
-    block.prev_hash == last_block.hash
+    block.prev_hash == last_block.hash && block.hash.starts_with(target)
   }
 
   /**

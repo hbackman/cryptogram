@@ -57,10 +57,14 @@ pub async fn handle_user_input(node: Arc<Node>) {
         println!("requesting blockchain sync");
       },
       ["/tx", message @ ..] => {
-        println!("broadcasting new block");
+        println!("mining new block");
 
         let mut chain = node.chain.lock().await;
-        let block = Block::next(chain.latest_block(), message.join(" "));
+        let mut block = Block::next(chain.latest_block(), message.join(" "));
+
+        block.mine_block();
+
+        println!("mined new block");
 
         chain.add_block(block.clone());
 
