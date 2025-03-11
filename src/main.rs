@@ -1,6 +1,6 @@
 mod api;
-mod block;
 mod p2p;
+mod blockchain;
 use clap::{Command, Arg};
 
 #[tokio::main]

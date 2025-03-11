@@ -8,7 +8,8 @@ use rand::seq::IteratorRandom;
 use crate::p2p::message::{Message, MessageType};
 use crate::p2p::gossip;
 use crate::p2p::input;
-use crate::block::{Block, Blockchain};
+use crate::blockchain::block::Block;
+use crate::blockchain::chain::Blockchain;
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -81,7 +82,7 @@ impl Node {
       if let Err(e) = stream.write_all(json_msg.as_bytes()).await {
         println!("Failed to send message to {}: {}", peer, e);
       } else {
-        println!("Sent: {:?} -> {}", message, peer);
+        // println!("Sent: {:?} -> {}", message, peer);
       }
     } else {
       println!("Could not connect to peer: {}", peer);
@@ -182,36 +183,33 @@ async fn handle_message(node: Arc<Node>, message: Message) {
       }).await;
     },
     MessageType::BlockchainReply => {
-      println!("BlockchainReply");
-
       match serde_json::from_str::<Vec<Block>>(&message.payload) {
         Ok(new_chain) => {
           node.chain.lock()
             .await
             .update(new_chain);
 
-          println!("Updated blockchain.");
+          println!("BlockchainReply: Updated blockchain.");
         }
         Err(e) => {
-          println!("Failed to parse blockchain: {}", e);
+          println!("BlockchainReply: Parsing Error: {}", e);
         }
       }
     },
     MessageType::BlockchainTx => {
-      println!("BlockchainTx");
-
        match serde_json::from_str::<Block>(&message.payload) {
          Ok(block) => {
+           println!("BlockchainTx: {:?}", block);
+
            node.chain
              .lock()
              .await
              .add_block(block);
          },
          Err(e) => {
-           println!("Failed to parse block: {}", e);
+           println!("BlockchainTx: Parsing Error: {}", e);
          }
        }
     },
-    _ => {}
   }
 }
