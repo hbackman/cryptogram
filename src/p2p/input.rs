@@ -41,6 +41,7 @@ pub async fn handle_user_input(node: Arc<Node>) {
         println!("  /send <MESSAGE> - Broadcast a message to all peers");
         println!("  /peers - List connected peers");
         println!("  /sync - Sync the blockchain");
+        println!("  /chain - List the blockchain contents");
         println!("  /tx <MESSAGE> - Add a blockchain transaction");
       }
     }
