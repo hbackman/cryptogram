@@ -91,6 +91,8 @@ impl Node {
 
   /**
    * Send message to all peers.
+   *
+   * Should probably be done with an "UnboundSender"
    */
   pub async fn yell(&self, message: &Message) {
     let peers = self.peers.lock().await.clone();
