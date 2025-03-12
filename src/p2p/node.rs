@@ -1,14 +1,12 @@
 use tokio::net::{TcpListener, TcpStream};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex;
 use serde_json;
 use std::sync::Arc;
 use std::collections::HashSet;
 use rand::seq::IteratorRandom;
-use crate::p2p::message::{Message, MessageType};
-use crate::p2p::gossip;
-use crate::p2p::input;
-use crate::blockchain::block::Block;
+use crate::p2p::message::Message;
+
 use crate::blockchain::chain::Blockchain;
 
 #[derive(Debug, Clone)]
@@ -19,7 +17,7 @@ pub struct Node {
 }
 
 impl Node {
-  pub async fn new(addr: String) -> Self {
+  pub async fn new(chain: Arc<Mutex<Blockchain>>, addr: String) -> Self {
     println!("Listening for messages on {}", addr);
 
     let listener = TcpListener::bind(&addr)
@@ -27,9 +25,9 @@ impl Node {
       .unwrap();
 
     Node {
-      peers: Arc::new(Mutex::new(HashSet::new())),
-      chain: Arc::new(Mutex::new(Blockchain::load_from_file("blockchain.json"))),
+      peers:    Arc::new(Mutex::new(HashSet::new())),
       listener: Arc::new(listener),
+      chain,
     }
   }
 
@@ -97,119 +95,5 @@ impl Node {
     for peer in peers.iter() {
       self.send(peer, message).await;
     }
-  }
-}
-
-/**
- * Start the p2p node.
- */
-pub async fn start_p2p_node(addr: String) {
-  let node = Arc::new(Node::new(addr).await);
-
-  tokio::spawn(handle_incoming_messages(node.clone()));
-  tokio::spawn(gossip::handle_peer_gossip(node.clone()));
-  tokio::spawn(input::handle_user_input(node.clone())).await.unwrap();
-}
-
-/**
- * Handle incoming messages and track peers.
- */
-async fn handle_incoming_messages(node: Arc<Node>) {
-  loop {
-    let (socket, _) = node.listener.accept().await.unwrap();
-    tokio::spawn(handle_client(node.clone(), socket));
-  }
-}
-
-/**
- * Read messages from a connected peer.
- */
-async fn handle_client(node: Arc<Node>, socket: TcpStream) {
-  let mut reader = BufReader::new(socket);
-  let mut buffer = String::new();
-
-  while reader.read_line(&mut buffer).await.unwrap() > 0 {
-    if let Ok(message) = serde_json::from_str::<Message>(&buffer.trim()) {
-      let sender = message.sender.clone();
-
-      node.clone().add_peer(&sender).await;
-
-      handle_message(node.clone(), message.clone()).await;
-    }
-    buffer.clear();
-  }
-}
-
-/**
- * Handle a peer message.
- */
-async fn handle_message(node: Arc<Node>, message: Message) {
-  match message.msg_type {
-    MessageType::Chat => {
-      println!("[{}] {}", message.sender, message.payload);
-    }
-    MessageType::PeerDiscovery => {
-      let peers_json = serde_json::to_string(
-        &node.get_peers().await
-      ).unwrap();
-
-      node.send(&message.sender, &Message{
-        msg_type: MessageType::PeerGossip,
-        sender: node.get_local_addr(),
-        payload: peers_json.to_string(),
-      }).await;
-    }
-    MessageType::PeerGossip => {
-      match serde_json::from_str::<Vec<String>>(&message.payload) {
-        Ok(new_peers) => {
-          for peer in new_peers {
-            node.add_peer(&peer).await;
-          }
-        }
-        Err(e) => {
-          println!("Failed to parse peer list: {}", e);
-        }
-      }
-    },
-    MessageType::BlockchainRequest => {
-      println!("BlockchainRequest");
-
-      let chain = node.chain.lock().await;
-
-      node.send(&message.sender, &Message{
-        msg_type: MessageType::BlockchainReply,
-        sender: node.get_local_addr(),
-        payload: chain.to_json(false),
-      }).await;
-    },
-    MessageType::BlockchainReply => {
-      match serde_json::from_str::<Vec<Block>>(&message.payload) {
-        Ok(new_chain) => {
-          node.chain.lock()
-            .await
-            .update(new_chain);
-
-          println!("BlockchainReply: Updated blockchain.");
-        }
-        Err(e) => {
-          println!("BlockchainReply: Parsing Error: {}", e);
-        }
-      }
-    },
-    MessageType::BlockchainTx => {
-       match serde_json::from_str::<Block>(&message.payload) {
-         Ok(block) => {
-           println!("BlockchainTx: {:?}", block);
-
-           node.chain
-             .lock()
-             .await
-             .add_block(block);
-         },
-         Err(e) => {
-           println!("BlockchainTx: Parsing Error: {}", e);
-         }
-       }
-    },
   }
 }
