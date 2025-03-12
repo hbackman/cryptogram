@@ -16,6 +16,7 @@ pub struct Block {
 pub struct BlockData {
   pub author: String,
   pub body:   String,
+  pub reply:  Option<String>,
 }
 
 impl BlockData {

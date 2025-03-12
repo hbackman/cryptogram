@@ -18,6 +18,7 @@ impl Blockchain {
     Block::new(BlockData{
       author: "anonymous".to_string(),
       body:   "genesis".to_string(),
+      reply:  None,
     }, 0, "0".to_string())
   }
 

@@ -52,6 +52,7 @@ pub async fn handle_user_input(node: Arc<Node>) {
           let block = Block::next(chain.latest_block(), BlockData{
             author: "chain".to_string(),
             body:   i.to_string(),
+            reply:  None,
           });
 
           chain.add_block(block);
@@ -154,6 +155,7 @@ async fn handle_transaction(node: Arc<Node>, data: &str) {
   let mut block = Block::next(chain.latest_block(), BlockData{
     author: "anonymous".to_string(),
     body:   data.to_string(),
+    reply:  None,
   });
 
   block.mine_block();

@@ -18,7 +18,7 @@ pub struct Node {
 
 impl Node {
   pub async fn new(chain: Arc<Mutex<Blockchain>>, addr: String) -> Self {
-    println!("Listening for messages on {}", addr);
+    println!("Running p2p on {}", addr);
 
     let listener = TcpListener::bind(&addr)
       .await
@@ -51,6 +51,15 @@ impl Node {
   }
 
   /**
+   * Remove a node peer.
+   */
+  pub async fn rem_peer(&self, peer: &str) {
+    let mut peers_guard = self.peers.lock().await;
+
+    peers_guard.remove(peer);
+  }
+
+  /**
    * Retrieve the node peers.
    */
   pub async fn get_peers(&self) -> Vec<String> {
@@ -80,10 +89,10 @@ impl Node {
       if let Err(e) = stream.write_all(json_msg.as_bytes()).await {
         println!("Failed to send message to {}: {}", peer, e);
       } else {
-        // println!("Sent: {:?} -> {}", message, peer);
       }
     } else {
-      println!("Could not connect to peer: {}", peer);
+      self.rem_peer(peer).await;
+      println!("Could not connect to peer: {}, removed from peer list.", peer);
     }
   }
 
