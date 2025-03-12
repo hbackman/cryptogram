@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::collections::HashSet;
 use rand::seq::IteratorRandom;
 use crate::p2p::message::Message;
-
 use crate::blockchain::chain::Blockchain;
 
 #[derive(Debug, Clone)]

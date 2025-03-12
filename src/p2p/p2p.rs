@@ -20,7 +20,6 @@ pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>, addr: String) {
   tokio::spawn(input::handle_user_input(node.clone())).await.unwrap();
 }
 
-
 /**
  * Handle incoming messages and track peers.
  */
