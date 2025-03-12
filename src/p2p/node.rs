@@ -177,12 +177,15 @@ async fn handle_message(node: Arc<Node>, message: Message) {
       println!("BlockchainRequest");
 
       let chain = node.chain.lock().await;
-
-      node.send(&message.sender, &Message{
+      let message = Message{
         msg_type: MessageType::BlockchainReply,
         sender: node.get_local_addr(),
         payload: chain.to_json(false),
-      }).await;
+      };
+
+      drop(chain);
+
+      node.send(&message.sender, &message).await;
     },
     MessageType::BlockchainReply => {
       match serde_json::from_str::<Vec<Block>>(&message.payload) {
