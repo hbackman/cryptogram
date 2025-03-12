@@ -14,8 +14,9 @@ pub enum MessageType {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Message {
-  pub msg_type: MessageType,
-  pub sender: String,
-  pub payload: String,
+pub struct Message
+{
+    pub msg_type: MessageType,
+    pub sender: String,
+    pub payload: String,
 }

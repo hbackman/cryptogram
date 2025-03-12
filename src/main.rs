@@ -16,10 +16,8 @@ async fn main() {
     .unwrap_or_default()
     .collect();
 
-  if peers.is_empty() {
-      println!("No peers provided.");
-  } else {
-      println!("Peers: {:?}", peers);
+  if ! peers.is_empty() {
+    println!("Peers: {:?}", peers);
   }
 
   p2p::node::start_p2p_node(addr).await;

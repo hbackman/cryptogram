@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use crate::blockchain::block::Block;
+use crate::blockchain::block::{Block, BlockData};
 use crate::p2p::node::Node;
 use crate::p2p::message::{Message, MessageType};
 
@@ -35,6 +35,33 @@ pub async fn handle_user_input(node: Arc<Node>) {
       ["/chain"] => {
         handle_chain_listing(node.clone()).await;
       },
+      ["/save"] => {
+        node.chain
+          .lock()
+          .await
+          .save_to_file("blockchain.json");
+
+        println!("Saved blockchain to disk.");
+      },
+      ["/spam"] => {
+        let mut chain = node.chain.lock().await;
+
+        println!("populating chain");
+
+        for i in 0..100_000 {
+          let block = Block::next(chain.latest_block(), BlockData{
+            author: "chain".to_string(),
+            body:   i.to_string(),
+          });
+
+          chain.add_block(block);
+        }
+
+        println!("done");
+      }
+      ["/exit"] => {
+        break;
+      },
       _ => {
         println!("Commands:");
         println!("  /connect <IP:PORT> - Manually connect to a peer");
@@ -43,6 +70,7 @@ pub async fn handle_user_input(node: Arc<Node>) {
         println!("  /sync - Sync the blockchain");
         println!("  /chain - List the blockchain contents");
         println!("  /tx <MESSAGE> - Add a blockchain transaction");
+        println!("  /exit - Exit the program");
       }
     }
   }
@@ -123,7 +151,10 @@ async fn handle_transaction(node: Arc<Node>, data: &str) {
   println!("mining new block");
 
   let mut chain = node.chain.lock().await;
-  let mut block = Block::next(chain.latest_block(), data.to_string());
+  let mut block = Block::next(chain.latest_block(), BlockData{
+    author: "anonymous".to_string(),
+    body:   data.to_string(),
+  });
 
   block.mine_block();
 

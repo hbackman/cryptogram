@@ -2,18 +2,30 @@ use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
   pub index:     u64,
   pub timestamp: u64,
   pub nonce:     u64,
-  pub data:      String,
+  pub data:      BlockData,
   pub prev_hash: String,
   pub hash:      String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BlockData {
+  pub author: String,
+  pub body:   String,
+}
+
+impl BlockData {
+  pub fn to_json(&self) -> String {
+    serde_json::to_string(&self).unwrap()
+  }
+}
+
 impl Block {
-  pub fn new(index: u64, data: String, previous_hash: String) -> Self {
+  pub fn new(data: BlockData, index: u64, previous_hash: String) -> Self {
     let timestamp = SystemTime::now()
       .duration_since(UNIX_EPOCH)
       .expect("Time went backwards")
@@ -32,10 +44,10 @@ impl Block {
     block
   }
 
-  pub fn next(previous: &Block, data: String) -> Self {
+  pub fn next(previous: &Block, data: BlockData) -> Self {
     let next_index = previous.index + 1;
     let this_hash = previous.hash.clone();
-    Block::new(next_index, data, this_hash)
+    Block::new(data, next_index, this_hash)
   }
 
   pub fn hash_block(&self) -> String {
@@ -43,7 +55,7 @@ impl Block {
     hasher.update(self.index.to_string());
     hasher.update(self.timestamp.to_string());
     hasher.update(self.nonce.to_string());
-    hasher.update(&self.data);
+    hasher.update(self.data.to_json());
     hasher.update(&self.prev_hash);
     format!("{:x}", hasher.finalize())
   }

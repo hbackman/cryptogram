@@ -1,5 +1,6 @@
 use serde::Serialize;
-use crate::blockchain::block::Block;
+use std::fs;
+use crate::blockchain::block::{Block, BlockData};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Blockchain {
@@ -14,7 +15,10 @@ impl Blockchain {
   }
 
   fn genesis() -> Block {
-    Block::new(0, "Genesis".to_string(), "0".to_string())
+    Block::new(BlockData{
+      author: "anonymous".to_string(),
+      body:   "genesis".to_string(),
+    }, 0, "0".to_string())
   }
 
   /**
@@ -64,6 +68,29 @@ impl Blockchain {
     // accept the new chain instead.
     if first0.hash != first1.hash || chain.len() > self.chain.len() {
       self.chain = chain;
+    }
+  }
+
+  /**
+   * Save the blockchain to the filesystem.
+   */
+  pub fn save_to_file(&self, filename: &str) {
+    fs::write(filename, self.to_json(true))
+      .expect("Failed to save blockchain.");
+  }
+
+  /**
+   * Load the blockchain from the filesystem.
+   */
+  pub fn load_from_file(filename: &str) -> Self {
+    match fs::read_to_string(filename) {
+      Ok(dt) => {
+        match serde_json::from_str::<Vec<Block>>(&dt) {
+          Ok(chain) => Self{chain},
+          Err(_)    => panic!("Failed to parse blockchain json."),
+        }
+      },
+      Err(_) => Self::new(),
     }
   }
 }

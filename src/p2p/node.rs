@@ -28,7 +28,7 @@ impl Node {
 
     Node {
       peers: Arc::new(Mutex::new(HashSet::new())),
-      chain: Arc::new(Mutex::new(Blockchain::new())),
+      chain: Arc::new(Mutex::new(Blockchain::load_from_file("blockchain.json"))),
       listener: Arc::new(listener),
     }
   }
