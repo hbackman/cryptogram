@@ -16,7 +16,6 @@ impl Blockchain {
 
   fn genesis() -> Block {
     Block::new(BlockData{
-      author: "anonymous".to_string(),
       body:   "genesis".to_string(),
       reply:  None,
     }, 0, "0".to_string())
@@ -27,7 +26,14 @@ impl Blockchain {
    */
   pub fn add_block(&mut self, block: Block) {
     if self.validate_block(&block) {
-      self.chain.push(block);
+      match block.validate_signature() {
+        Ok(_) => {
+          self.chain.push(block);
+        }
+        Err(err) => {
+          println!("Invalid block signature: {:?}", err);
+        }
+      }
     } else {
       println!("Invalid block: {:?}", block);
     }

@@ -1,22 +1,27 @@
 use serde::{Serialize, Deserialize};
 use sha2::{Sha256, Digest};
 use std::time::{SystemTime, UNIX_EPOCH};
+use ed25519_dalek::Signature;
+use ed25519_dalek::VerifyingKey;
+use crate::blockchain::sign::Keypair;
+use crate::blockchain::sign::ValidationError;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
-  pub index:     u64,
-  pub timestamp: u64,
-  pub nonce:     u64,
-  pub data:      BlockData,
-  pub prev_hash: String,
-  pub hash:      String,
+  pub index:      u64,
+  pub timestamp:  u64,
+  pub nonce:      u64,
+  pub data:       BlockData,
+  pub prev_hash:  String,
+  pub hash:       String,
+  pub public_key: String,
+  pub signature:  String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockData {
-  pub author: String,
-  pub body:   String,
-  pub reply:  Option<String>,
+  pub body:  String,
+  pub reply: Option<String>,
 }
 
 impl BlockData {
@@ -39,6 +44,8 @@ impl Block {
       data,
       prev_hash: previous_hash.clone(),
       hash: String::new(), // placeholder
+      public_key: "".to_string(),
+      signature:  "".to_string(),
     };
 
     block.hash = block.hash_block();
@@ -57,6 +64,8 @@ impl Block {
     hasher.update(self.timestamp.to_string());
     hasher.update(self.nonce.to_string());
     hasher.update(self.data.to_json());
+    hasher.update(self.signature.to_string());
+    hasher.update(self.public_key.to_string());
     hasher.update(&self.prev_hash);
     format!("{:x}", hasher.finalize())
   }
@@ -73,6 +82,40 @@ impl Block {
     }
 
     println!("Block mined! Nonce: {}, Hash: {}", self.nonce, self.hash);
+  }
+
+  /**
+   * Sign the block.
+   */
+  pub fn sign_block(&mut self, keypair: Keypair) {
+    self.signature = keypair.sign_message(&self.data.body.to_string());
+    self.public_key = keypair.get_public_key()
+  }
+
+  /**
+   * Validate the block signature.
+   */
+  pub fn validate_signature(&self) -> Result<bool, ValidationError> {
+    // Decode public key and check length
+    let public_key_bytes = hex::decode(self.public_key.to_string())?;
+    let public_key = VerifyingKey::from_bytes(
+      &public_key_bytes
+        .try_into()
+        .map_err(|_| ValidationError::InvalidPublicKeyLength)?,
+    ).map_err(|_| ValidationError::InvalidPublicKey)?;
+
+    // Decode signature and check length
+    let signature_bytes = hex::decode(self.signature.to_string())?;
+    let signature = Signature::from_bytes(
+      &signature_bytes
+        .try_into()
+        .map_err(|_| ValidationError::InvalidSignatureLength)?,
+    );
+
+    public_key
+      .verify_strict(self.data.body.as_bytes(), &signature)
+      .map(|_| true)
+      .map_err(|_| ValidationError::SignatureVerificationFailed)
   }
 
   /**

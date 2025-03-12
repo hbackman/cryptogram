@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use crate::blockchain::block::{Block, BlockData};
+use crate::blockchain::sign::Keypair;
 use crate::p2p::node::Node;
 use crate::p2p::message::{Message, MessageType};
 
@@ -43,23 +44,6 @@ pub async fn handle_user_input(node: Arc<Node>) {
 
         println!("Saved blockchain to disk.");
       },
-      ["/spam"] => {
-        let mut chain = node.chain.lock().await;
-
-        println!("populating chain");
-
-        for i in 0..100_000 {
-          let block = Block::next(chain.latest_block(), BlockData{
-            author: "chain".to_string(),
-            body:   i.to_string(),
-            reply:  None,
-          });
-
-          chain.add_block(block);
-        }
-
-        println!("done");
-      }
       ["/exit"] => {
         break;
       },
@@ -153,12 +137,12 @@ async fn handle_transaction(node: Arc<Node>, data: &str) {
 
   let mut chain = node.chain.lock().await;
   let mut block = Block::next(chain.latest_block(), BlockData{
-    author: "anonymous".to_string(),
     body:   data.to_string(),
     reply:  None,
   });
 
   block.mine_block();
+  block.sign_block(Keypair::new());
 
   println!("mined new block");
 

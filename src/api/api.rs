@@ -7,9 +7,8 @@ use crate::blockchain::block::{Block, BlockData};
 
 #[derive(Serialize)]
 struct Post {
-  author:    String,
-  body:      String,
-  reply:     Option<String>,
+  body:  String,
+  reply: Option<String>,
   timestamp: u64,
 }
 
@@ -20,9 +19,10 @@ struct FeedReply {
 
 #[derive(Deserialize)]
 struct PostRequest {
-  author: String,
-  body:   String,
-  reply:  Option<String>,
+  body:       String,
+  reply:      Option<String>,
+  public_key: String,
+  signature:  String,
 }
 
 /**
@@ -65,7 +65,6 @@ async fn handle_feed(chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, 
     .chain
     .iter()
     .map(|block| Post{
-      author:    block.data.clone().author,
       body:      block.data.clone().body,
       reply:     block.data.clone().reply,
       timestamp: block.timestamp,
@@ -79,10 +78,14 @@ async fn handle_feed(chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, 
 async fn handle_post(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
   let mut chain = chain.lock().await;
   let mut block = Block::next(chain.latest_block(), BlockData{
-    author: req.author,
     body:   req.body,
     reply:  req.reply,
   });
+
+  block.signature = req.signature;
+  block.public_key = req.public_key;
+
+  // todo: handle invalid signature
 
   block.mine_block();
   chain.add_block(block.clone());
@@ -93,7 +96,6 @@ async fn handle_post(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> Result<
 
   Ok(warp::reply::json(&FeedReply{
     feed: vec![Post{
-      author:    block.data.clone().author,
       body:      block.data.clone().body,
       reply:     block.data.clone().reply,
       timestamp: block.timestamp,
