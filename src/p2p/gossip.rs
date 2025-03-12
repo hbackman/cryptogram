@@ -4,7 +4,7 @@ use rand::seq::SliceRandom;
 use crate::p2p::node::Node;
 use crate::p2p::message::{Message, MessageType};
 
-pub async fn handle_peer_gossip(node: Arc<Node>) {
+pub async fn handle_peer_gossip(node: Arc<Node>) -> ! {
   loop {
     sleep(Duration::from_secs(10)).await; // Gossip every 10 seconds
 
