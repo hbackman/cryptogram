@@ -1,7 +1,8 @@
+use clap::{Command, Arg};
+
 mod api;
 mod p2p;
 mod blockchain;
-use clap::{Command, Arg};
 
 #[tokio::main]
 async fn main() {
