@@ -135,11 +135,13 @@ async fn handle_chain_syncing(node: Arc<Node>) {
 async fn handle_transaction(node: Arc<Node>, data: &str) {
   println!("mining new block");
 
+  let data = BlockData::Post {
+    body:  data.to_string(),
+    reply: None,
+  };
+
   let mut chain = node.chain.lock().await;
-  let mut block = Block::next(chain.latest_block(), BlockData{
-    body:   data.to_string(),
-    reply:  None,
-  });
+  let mut block = Block::next(chain.latest_block(), data);
 
   block.mine_block();
   block.sign_block(Keypair::new());
