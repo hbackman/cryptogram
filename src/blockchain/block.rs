@@ -1,4 +1,5 @@
 use serde::{Serialize, Deserialize};
+use serde_json::Value;
 use sha2::{Sha256, Digest};
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::blockchain::sign::Keypair;
@@ -47,7 +48,7 @@ impl PendingBlock {
     validate_signature(
       &self.public_key,
       &self.signature,
-      &self.data.to_json()
+      &self.data.to_json_for_signing()
     )
   }
 }
@@ -70,6 +71,17 @@ pub enum BlockData {
 impl BlockData {
   pub fn to_json(&self) -> String {
     serde_json::to_string(&self).unwrap()
+  }
+
+  pub fn to_json_for_signing(&self) -> String {
+    let json = serde_json::to_string(self).unwrap();
+    let mut value = serde_json::from_str(&json).unwrap();
+
+    if let Value::Object(ref mut map) = value {
+      map.remove("type");
+    }
+
+    serde_json::to_string(&value).unwrap()
   }
 }
 
@@ -142,7 +154,7 @@ impl Block {
     validate_signature(
       &self.public_key,
       &self.signature,
-      &self.data.to_json()
+      &self.data.to_json_for_signing()
     )
   }
 

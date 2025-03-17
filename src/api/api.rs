@@ -37,11 +37,18 @@ struct UserRequest {
   signature:  String,
 }
 
+#[derive(Clone, Serialize)]
+struct HealthReply {}
+
 /**
  * Start the API.
  */
 pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
   let addr: SocketAddr = ([127, 0, 0, 1], 3030).into();
+
+  let health = warp::path("health")
+    .and(warp::get())
+    .and_then(handle_health);
 
   let feed = warp::path("feed")
     .and(warp::get())
@@ -69,7 +76,8 @@ pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
       }))
       .and_then(handle_user);
 
-  let routes = feed
+  let routes = health
+    .or(feed)
     .or(post)
     .or(user)
     .with(warp::cors()
@@ -93,6 +101,10 @@ pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
       eprintln!("Failed to bind server: {}", e);
     }
   }
+}
+
+async fn handle_health() -> Result<impl warp::Reply, warp::Rejection> {
+  Ok(warp::reply::json(&HealthReply{}))
 }
 
 async fn handle_feed(chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {

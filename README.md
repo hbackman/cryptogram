@@ -18,4 +18,4 @@ Contributions are welcome! Feel free to fork, submit PRs, or open issues.
 - Blockchain sync improvements - The blockchain sync simply downloads the entire
   blockchain from a random node. This node could lie and this would be bad. It
   can also only send the chain if it's small enough to fit in the MTU.
-- Blockchain disk peristance
+- Blockchain disk peristance improvements
