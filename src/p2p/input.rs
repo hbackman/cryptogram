@@ -148,7 +148,7 @@ async fn handle_transaction(node: Arc<Node>, data: &str) {
 
   println!("mined new block");
 
-  chain.add_block(block.clone());
+  let _ = chain.add_block(block.clone());
 
   node.yell(&Message{
     msg_type: MessageType::BlockchainTx,

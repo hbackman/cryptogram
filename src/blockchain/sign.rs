@@ -46,7 +46,7 @@ pub enum ValidationError {
   SignatureVerificationFailed,
 }
 
-pub fn validate_signature(public_key: &str, signature: &str, message: &str) -> Result<bool, ValidationError> {
+pub fn validate_signature(public_key: &str, signature: &str, message: &str) -> Result<(), ValidationError> {
   // Decode public key and check length
   let public_key_bytes = hex::decode(public_key)?;
   let public_key = VerifyingKey::from_bytes(
@@ -65,6 +65,5 @@ pub fn validate_signature(public_key: &str, signature: &str, message: &str) -> R
 
   public_key
     .verify_strict(message.as_bytes(), &signature)
-    .map(|_| true)
     .map_err(|_| ValidationError::SignatureVerificationFailed)
 }

@@ -1,17 +1,19 @@
 use serde::Serialize;
 use std::fs;
-use std::collections::HashMap;
-use crate::blockchain::block::{Block, BlockData};
+use std::collections::HashSet;
+use crate::blockchain::block::{Block, BlockData, PendingBlock};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Blockchain {
   pub chain: Vec<Block>,
+  pub mpool: Vec<PendingBlock>,
 }
 
 impl Blockchain {
   pub fn new() -> Self {
     Self {
       chain: vec![Blockchain::genesis()],
+      mpool: vec![],
     }
   }
 
@@ -22,58 +24,82 @@ impl Blockchain {
   /**
    * Add a block to the chain.
    */
-  pub fn add_block(&mut self, block: Block) {
-    if !self.validate_hash(&block) {
-      println!("Failed to add block to chain: Hash is not valid.");
-      println!("{:?}", block);
-      return;
-    }
+  pub fn add_block(&mut self, block: Block) -> Result<(), String> {
+    block.validate_signature().map_err(|e| e.to_string())?;
 
-    if !self.validate_user(&block) {
-      println!("Failed to add block to chain: User is not registered.");
-      println!("{:?}", block);
-      return;
-    }
+    self.validate_hash(&block)?;
+    self.validate_user(&block)?;
 
-    match block.validate_signature() {
-      Ok(_) => {
-        self.chain.push(block);
-      }
-      Err(err) => {
-        println!("Invalid block signature: {:?}", err);
-      }
-    }
+    self.chain.push(block);
+
+    Ok(())
+  }
+
+  pub fn push_mempool(&mut self, block: PendingBlock) -> Result<(), String> {
+    block.validate_signature().map_err(|e| e.to_string())?;
+
+    self.mpool.push(block);
+
+    Ok(())
   }
 
   /**
    * Validate that the block contains the previous hash and that the difficulty
    * was met during block mining.
    */
-  fn validate_hash(&self, block: &Block) -> bool {
+  fn validate_hash(&self, block: &Block) -> Result<(), String> {
     let target = "0".repeat(block.difficulty());
     let lblock = self.latest_block();
 
-    block.prev_hash == lblock.hash && block.hash.starts_with(&target)
+    if block.prev_hash != lblock.hash {
+      return Err("Block hash did not match previous hash.".to_string());
+    }
+
+    if ! block.hash.starts_with(&target) {
+      return Err("Block hash did not meet difficulty.".to_string());
+    }
+
+    Ok(())
   }
 
   /**
    * Validate that the user is registered before they are allowed to create a
    * new block. This only applies for `Post` block data.
    */
-  fn validate_user(&self, block: &Block) -> bool {
-    if !matches!(block.data, BlockData::Post { .. }) {
-      return true;
-    }
-
-    let mut user_map: HashMap<String, String> = HashMap::new();
+  fn validate_user(&self, block: &Block) -> Result<(), String> {
+    let mut user_names: HashSet<String> = HashSet::new();
+    let mut user_pkeys: HashSet<String> = HashSet::new();
 
     for block in &self.chain {
       if let BlockData::User { username } = &block.data {
-        user_map.insert(block.public_key.clone(), username.clone());
+        user_names.insert(username.clone());
+        user_pkeys.insert(block.public_key.clone());
       }
     }
 
-    user_map.contains_key(&block.public_key)
+    // Validate user registration.
+    if let BlockData::User { username } = block.data.clone() {
+      if user_names.contains(&username) {
+        return Err(format!("Username '{}' is already taken.", username));
+      }
+
+      if user_pkeys.contains(&block.public_key) {
+        return Err(format!("Public key '{}' is already registered.", block.public_key));
+      }
+
+      return Ok(());
+    }
+
+    // Validate post.
+    if let BlockData::Post {..} = block.data.clone() {
+      if !user_pkeys.contains(&block.public_key) {
+        return Err(format!("Public key '{}' is not registered.", block.public_key));
+      }
+
+      return Ok(());
+    }
+
+    Ok(())
   }
 
   /**
@@ -123,7 +149,10 @@ impl Blockchain {
     match fs::read_to_string(filename) {
       Ok(dt) => {
         match serde_json::from_str::<Vec<Block>>(&dt) {
-          Ok(chain) => Self{chain},
+          Ok(chain) => Self{
+            chain,
+            mpool: vec![],
+          },
           Err(_)    => panic!("Failed to parse blockchain json."),
         }
       },

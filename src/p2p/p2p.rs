@@ -1,7 +1,9 @@
 use tokio::net::TcpStream;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::Mutex;
+use tokio::time::sleep;
 use std::sync::Arc;
+use std::time::Duration;
 use crate::p2p::node::Node;
 use crate::p2p::gossip;
 use crate::p2p::input;
@@ -15,6 +17,7 @@ use crate::p2p::message::{Message, MessageType};
 pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>, addr: String) {
   let node = Arc::new(Node::new(chain, addr).await);
 
+  tokio::spawn(handle_mempool_blocks(node.clone()));
   tokio::spawn(handle_incoming_messages(node.clone()));
   tokio::spawn(gossip::handle_peer_gossip(node.clone()));
   tokio::spawn(input::handle_user_input(node.clone())).await.unwrap();
@@ -113,12 +116,58 @@ async fn handle_message(node: Arc<Node>, message: Message) {
            node.chain
              .lock()
              .await
-             .add_block(block);
+             .add_block(block)
+             .unwrap_or_else(|e| println!("{}", e));
          },
          Err(e) => {
            println!("BlockchainTx: Parsing Error: {}", e);
          }
        }
     },
+  }
+}
+
+/**
+ * Handle pending blocks in the mempool.
+ */
+pub async fn handle_mempool_blocks(node: Arc<Node>) {
+  loop {
+    let block = {
+      let mut chain = node
+        .chain
+        .lock()
+        .await;
+      chain.mpool.pop()
+    };
+
+    // todo: cross-node race conditions (retry)
+
+    if let Some(pending_block) = block {
+      println!("Processing block");
+
+      let mut chain = node.chain.lock().await;
+      let mut block = Block::next(
+        chain.latest_block(),
+        pending_block.data
+      );
+
+      block.timestamp  = pending_block.timestamp;
+      block.signature  = pending_block.signature;
+      block.public_key = pending_block.public_key;
+
+      block.mine_block();
+      chain.add_block(block.clone())
+        .unwrap_or_else(|e| println!("{}", e));
+
+      println!("Processed block: {:?}", block);
+
+      node.yell(&Message{
+        msg_type: MessageType::BlockchainTx,
+        sender: node.get_local_addr(),
+        payload: block.to_json(),
+      }).await;
+    }
+
+    sleep(Duration::from_secs(1)).await;
   }
 }

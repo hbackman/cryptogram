@@ -1,10 +1,13 @@
 use tokio::sync::Mutex;
+use tokio::net::TcpListener;
 use warp::Filter;
+use warp::http;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::collections::HashMap;
 use crate::blockchain::chain::Blockchain;
-use crate::blockchain::block::{Block, BlockData};
+use crate::blockchain::block::{BlockData, PendingBlock};
 
 #[derive(Clone, Serialize)]
 struct Post {
@@ -34,15 +37,12 @@ struct UserRequest {
   signature:  String,
 }
 
-#[derive(Clone, Serialize)]
-struct UserReply {
-  hash: String,
-}
-
 /**
  * Start the API.
  */
 pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
+  let addr: SocketAddr = ([127, 0, 0, 1], 3030).into();
+
   let feed = warp::path("feed")
     .and(warp::get())
     .and(warp::any().map({
@@ -78,9 +78,21 @@ pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
       .allow_headers(vec!["Content-Type"])
     );
 
-  println!("Running api on 127.0.0.1:3030");
+  match TcpListener::bind(addr).await {
+    Ok(listener) => {
+      drop(listener);
 
-  warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
+      println!("Running api on 127.0.0.1:3030");
+
+      warp::serve(routes).run(addr).await;
+    }
+    Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+      println!("API already running on {}, skipping startup.", addr);
+    }
+    Err(e) => {
+      eprintln!("Failed to bind server: {}", e);
+    }
+  }
 }
 
 async fn handle_feed(chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
@@ -123,52 +135,36 @@ async fn handle_feed(chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, 
 }
 
 async fn handle_post(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
-  let data = BlockData::Post {
-    body:   req.clone().body,
-    reply:  req.clone().reply,
-  };
-
   let mut chain = chain.lock().await;
-  let mut block = Block::next(chain.latest_block(), data);
 
-  block.signature = req.clone().signature;
-  block.public_key = req.clone().public_key;
+  chain.push_mempool(PendingBlock::new(
+    BlockData::Post {
+      body:   req.clone().body,
+      reply:  req.clone().reply,
+    },
+    req.public_key,
+    req.signature,
+  )).unwrap_or_else(|e| println!("{}", e));
 
-  // todo: handle invalid signature
-  // todo: notify peers
-
-  println!("handle_post: {}", block.data.to_json());
-
-  block.mine_block();
-  chain.add_block(block.clone());
-
-  println!("handle_post: done");
-
-  Ok(warp::reply::with_status(warp::reply(), warp::http::StatusCode::NO_CONTENT))
+  Ok(warp::reply::with_status(
+    warp::reply(),
+    http::StatusCode::NO_CONTENT
+  ))
 }
 
 async fn handle_user(req: UserRequest, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
-  let data = BlockData::User {
-    username: req.username,
-  };
-
   let mut chain = chain.lock().await;
-  let mut block = Block::next(chain.latest_block(), data);
 
-  block.signature = req.signature;
-  block.public_key = req.public_key;
+  chain.push_mempool(PendingBlock::new(
+    BlockData::User {
+      username: req.username,
+    },
+    req.public_key,
+    req.signature,
+  )).unwrap_or_else(|e| println!("{}", e));
 
-  // todo: handle invalid signature
-  // todo: notify peers
-
-  println!("handle_user: {}", block.data.to_json());
-
-  block.mine_block();
-  chain.add_block(block.clone());
-
-  println!("handle_user: done");
-
-  Ok(warp::reply::json(&UserReply{
-    hash: block.hash.to_string(),
-  }))
+  Ok(warp::reply::with_status(
+    warp::reply(),
+    http::StatusCode::NO_CONTENT
+  ))
 }

@@ -18,6 +18,41 @@ pub struct Block {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PendingBlock {
+  pub timestamp:  u64,
+  pub data:       BlockData,
+  pub public_key: String,
+  pub signature:  String,
+}
+
+impl PendingBlock {
+  pub fn new(data: BlockData, public_key: String, signature: String) -> Self {
+    let timestamp = SystemTime::now()
+      .duration_since(UNIX_EPOCH)
+      .expect("Time went backwards")
+      .as_secs();
+
+    PendingBlock {
+      timestamp,
+      data,
+      public_key,
+      signature,
+    }
+  }
+
+  /**
+   * Validate the block signature.
+   */
+  pub fn validate_signature(&self) -> Result<(), ValidationError> {
+    validate_signature(
+      &self.public_key,
+      &self.signature,
+      &self.data.to_json()
+    )
+  }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum BlockData {
   Genesis {
@@ -103,7 +138,7 @@ impl Block {
   /**
    * Validate the block signature.
    */
-  pub fn validate_signature(&self) -> Result<bool, ValidationError> {
+  pub fn validate_signature(&self) -> Result<(), ValidationError> {
     validate_signature(
       &self.public_key,
       &self.signature,
