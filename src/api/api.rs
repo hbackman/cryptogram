@@ -33,6 +33,7 @@ struct PostRequest {
 #[derive(Clone, Deserialize)]
 struct UserRequest {
   username:   String,
+  biography:  String,
   public_key: String,
   signature:  String,
 }
@@ -114,7 +115,7 @@ async fn handle_feed(chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, 
   let mut user_map: HashMap<String, String> = HashMap::new();
 
   for block in &chain.chain {
-    if let BlockData::User { username } = &block.data {
+    if let BlockData::User { username, .. } = &block.data {
       user_map.insert(block.public_key.clone(), username.clone());
     }
   }
@@ -165,11 +166,14 @@ async fn handle_post(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> Result<
 }
 
 async fn handle_user(req: UserRequest, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
+  println!("test??");
+
   let mut chain = chain.lock().await;
 
   chain.push_mempool(PendingBlock::new(
     BlockData::User {
-      username: req.username,
+      username:  req.username,
+      biography: req.biography,
     },
     req.public_key,
     req.signature,

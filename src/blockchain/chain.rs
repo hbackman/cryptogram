@@ -71,14 +71,14 @@ impl Blockchain {
     let mut user_pkeys: HashSet<String> = HashSet::new();
 
     for block in &self.chain {
-      if let BlockData::User { username } = &block.data {
+      if let BlockData::User { username, .. } = &block.data {
         user_names.insert(username.clone());
         user_pkeys.insert(block.public_key.clone());
       }
     }
 
     // Validate user registration.
-    if let BlockData::User { username } = block.data.clone() {
+    if let BlockData::User { username, .. } = block.data.clone() {
       if user_names.contains(&username) {
         return Err(format!("Username '{}' is already taken.", username));
       }

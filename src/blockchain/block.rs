@@ -45,10 +45,12 @@ impl PendingBlock {
    * Validate the block signature.
    */
   pub fn validate_signature(&self) -> Result<(), ValidationError> {
+    println!("data: {}", &self.data.to_string_for_signing());
+
     validate_signature(
       &self.public_key,
       &self.signature,
-      &self.data.to_json_for_signing()
+      &self.data.to_string_for_signing()
     )
   }
 }
@@ -60,7 +62,8 @@ pub enum BlockData {
     //
   },
   User {
-    username: String,
+    username:  String,
+    biography: String,
   },
   Post {
     body:  String,
@@ -73,15 +76,22 @@ impl BlockData {
     serde_json::to_string(&self).unwrap()
   }
 
-  pub fn to_json_for_signing(&self) -> String {
+  pub fn to_string_for_signing(&self) -> String {
     let json = serde_json::to_string(self).unwrap();
     let mut value = serde_json::from_str(&json).unwrap();
 
     if let Value::Object(ref mut map) = value {
       map.remove("type");
-    }
 
-    serde_json::to_string(&value).unwrap()
+      let mut key_value_pairs: Vec<String> = map.iter()
+        .map(|(key, value)| format!("{}={}", key, value))
+        .collect();
+
+      key_value_pairs.sort();
+      key_value_pairs.join("|")
+    } else {
+      panic!("Expected a json object for signing.");
+    }
   }
 }
 
@@ -154,7 +164,7 @@ impl Block {
     validate_signature(
       &self.public_key,
       &self.signature,
-      &self.data.to_json_for_signing()
+      &self.data.to_string_for_signing()
     )
   }
 
