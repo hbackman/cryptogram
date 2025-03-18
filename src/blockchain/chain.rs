@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::fs;
 use std::collections::HashSet;
+use std::collections::HashMap;
 use crate::blockchain::block::{Block, BlockData, PendingBlock};
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,5 +159,21 @@ impl Blockchain {
       },
       Err(_) => Self::new(),
     }
+  }
+
+  /**
+   * Retrieve users from the user registration blocks. This returns a hash map
+   * with <public_key, username>.
+   */
+  pub fn get_users(&self) -> HashMap<String, String> {
+    let mut map: HashMap<String, String> = HashMap::new();
+
+    for block in &self.chain {
+      if let BlockData::User { username, .. } = &block.data {
+        map.insert(block.public_key.clone(), username.clone());
+      }
+    }
+
+    map
   }
 }
