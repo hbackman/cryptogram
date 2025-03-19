@@ -19,3 +19,11 @@ Contributions are welcome! Feel free to fork, submit PRs, or open issues.
   blockchain from a random node. This node could lie and this would be bad. It
   can also only send the chain if it's small enough to fit in the MTU.
 - Blockchain disk peristance improvements
+- Posts
+  - Size validation (300 chars)
+  - Images?
+  - Replies
+  - Retweets
+- Users
+  - Size validation (255 chars?)
+  - Images?

@@ -8,17 +8,19 @@ use crate::blockchain::block::{BlockData, PendingBlock};
 
 #[derive(Clone, Deserialize)]
 pub struct UserRequest {
-  username:   String,
-  biography:  String,
-  public_key: String,
-  signature:  String,
+  display_name: String,
+  username:     String,
+  biography:    String,
+  public_key:   String,
+  signature:    String,
 }
 
 #[derive(Clone, Serialize)]
 struct User {
-  username:   String,
-  biography:  String,
-  public_key: String,
+  display_name: String,
+  username:     String,
+  biography:    String,
+  public_key:   String,
 }
 
 pub fn user_routes(chain: Arc<Mutex<Blockchain>>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -55,8 +57,9 @@ async fn handle_user_post(req: UserRequest, chain: Arc<Mutex<Blockchain>>) -> Re
 
   chain.push_mempool(PendingBlock::new(
     BlockData::User {
-      username:  req.username,
-      biography: req.biography,
+      display_name: req.display_name,
+      username:     req.username,
+      biography:    req.biography,
     },
     req.public_key,
     req.signature,
@@ -80,12 +83,17 @@ async fn handle_user_get(username: String, chain: Arc<Mutex<Blockchain>>) -> Res
     .find(|block| {
       matches!(&block.data, BlockData::User { username: u, .. } if u == &username)
     }) {
-    if let BlockData::User { username, biography } = &block.data {
+    if let BlockData::User {
+      username,
+      biography,
+      display_name,
+    } = &block.data {
       return Ok(warp::reply::json(
         &User{
-          username:   username.clone(),
-          biography:  biography.clone(),
-          public_key: block.public_key.clone(),
+          display_name: display_name.clone(),
+          username:     username.clone(),
+          biography:    biography.clone(),
+          public_key:   block.public_key.clone(),
         }
       ));
     }
@@ -104,12 +112,17 @@ async fn handle_user_search(search: String, chain: Arc<Mutex<Blockchain>>) -> Re
     .chain
     .iter()
     .filter_map(|block| {
-      if let BlockData::User { username, biography } = &block.data {
+      if let BlockData::User {
+        username,
+        biography,
+        display_name,
+      } = &block.data {
         if username.to_lowercase().contains(&search.to_lowercase()) {
           Some(User {
-            username:   username.clone(),
-            biography:  biography.clone(),
-            public_key: block.public_key.clone(),
+            display_name: display_name.clone(),
+            username:     username.clone(),
+            biography:    biography.clone(),
+            public_key:   block.public_key.clone(),
           })
         } else {
           None

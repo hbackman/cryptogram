@@ -2,7 +2,6 @@ use serde::{Serialize, Deserialize};
 use serde_json::Value;
 use sha2::{Sha256, Digest};
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::blockchain::sign::Keypair;
 use crate::blockchain::sign::ValidationError;
 use crate::blockchain::sign::validate_signature;
 
@@ -62,8 +61,9 @@ pub enum BlockData {
     //
   },
   User {
-    username:  String,
-    biography: String,
+    display_name: String,
+    username:     String,
+    biography:    String,
   },
   Post {
     body:  String,
@@ -147,14 +147,6 @@ impl Block {
     }
 
     println!("Block mined! Nonce: {}, Hash: {}", self.nonce, self.hash);
-  }
-
-  /**
-   * Sign the block.
-   */
-  pub fn sign_block(&mut self, keypair: Keypair) {
-    self.signature = keypair.sign_message(&self.data.to_json());
-    self.public_key = keypair.get_public_key()
   }
 
   /**

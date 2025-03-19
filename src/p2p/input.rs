@@ -1,7 +1,5 @@
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use crate::blockchain::block::{Block, BlockData};
-use crate::blockchain::sign::Keypair;
 use crate::p2p::node::Node;
 use crate::p2p::message::{Message, MessageType};
 
@@ -30,9 +28,6 @@ pub async fn handle_user_input(node: Arc<Node>) {
       ["/sync"] => {
         handle_chain_syncing(node.clone()).await;
       },
-      ["/tx", message @ ..] => {
-        handle_transaction(node.clone(), &message.join(" ")).await;
-      },
       ["/chain"] => {
         handle_chain_listing(node.clone()).await;
       },
@@ -44,18 +39,13 @@ pub async fn handle_user_input(node: Arc<Node>) {
 
         println!("Saved blockchain to disk.");
       },
-      ["/exit"] => {
-        break;
-      },
       _ => {
         println!("Commands:");
-        println!("  /connect <IP:PORT> - Manually connect to a peer");
         println!("  /send <MESSAGE> - Broadcast a message to all peers");
+        println!("  /connect <IP:PORT> - Manually connect to a peer");
         println!("  /peers - List connected peers");
         println!("  /sync - Sync the blockchain");
         println!("  /chain - List the blockchain contents");
-        println!("  /tx <MESSAGE> - Add a blockchain transaction");
-        println!("  /exit - Exit the program");
       }
     }
   }
@@ -127,32 +117,4 @@ async fn handle_chain_syncing(node: Arc<Node>) {
   }).await;
 
   println!("requesting blockchain sync");
-}
-
-/**
- * Handle new transaction.
- */
-async fn handle_transaction(node: Arc<Node>, data: &str) {
-  println!("mining new block");
-
-  let data = BlockData::Post {
-    body:  data.to_string(),
-    reply: None,
-  };
-
-  let mut chain = node.chain.lock().await;
-  let mut block = Block::next(chain.latest_block(), data);
-
-  block.mine_block();
-  block.sign_block(Keypair::new());
-
-  println!("mined new block");
-
-  let _ = chain.add_block(block.clone());
-
-  node.yell(&Message{
-    msg_type: MessageType::BlockchainTx,
-    sender: node.get_local_addr(),
-    payload: block.to_json(),
-  }).await;
 }

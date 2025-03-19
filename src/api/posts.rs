@@ -3,16 +3,8 @@ use serde::{Deserialize, Serialize};
 use warp::http;
 use warp::Filter;
 use std::sync::Arc;
-use crate::blockchain::chain::Blockchain;
+use crate::blockchain::chain::{Blockchain, Post};
 use crate::blockchain::block::{BlockData, PendingBlock};
-
-#[derive(Clone, Serialize)]
-struct Post {
-  author:    String,
-  body:      String,
-  reply:     Option<String>,
-  timestamp: u64,
-}
 
 #[derive(Clone, Deserialize)]
 pub struct PostRequest {
@@ -59,41 +51,22 @@ fn with_chain(
  */
 async fn handle_feed(query: FeedQuery, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
   let chain = chain.lock().await;
+  let posts = chain.get_posts();
 
-  // Step 1: Build a map of public_key -> username from User registrations
-  let user_map = chain.get_users();
+  if let Some(user) = query.user {
+    let posts: Vec<Post> = posts
+        .into_iter()
+        .filter(|post| post.author.username == user)
+        .collect();
 
-  // Step 2: Use this map to set `author` in Post blocks
-  let posts = chain
-    .chain
-    .iter()
-    .filter_map(|block| {
-      if let BlockData::Post { body, reply, .. } = &block.data {
-        let author = user_map
-          .get(&block.public_key)
-          .cloned()
-          .unwrap_or_else(|| "Anonymous".to_string());
-
-        if let Some(ref requested_user) = query.user {
-          if &author != requested_user {
-            return None;
-          }
-        }
-
-        Some(Post {
-          author,
-          body:      body.clone(),
-          reply:     reply.clone(),
-          timestamp: block.timestamp,
-        })
-      } else {
-        None
-      }
-    })
-    .rev()
-    .collect();
-
-  Ok(warp::reply::json(&FeedReply{ feed: posts }))
+    Ok(warp::reply::json(&FeedReply{
+      feed: posts,
+    }))
+  } else {
+    Ok(warp::reply::json(&FeedReply{
+      feed: posts,
+    }))
+  }
 }
 
 /**

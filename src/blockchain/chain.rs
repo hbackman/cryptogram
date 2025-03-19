@@ -5,6 +5,20 @@ use std::collections::HashMap;
 use crate::blockchain::block::{Block, BlockData, PendingBlock};
 
 #[derive(Debug, Clone, Serialize)]
+pub struct Post {
+  pub author:    User,
+  pub body:      String,
+  pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct User {
+  pub display_name: String,
+  pub username:     String,
+  pub public_key:   String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Blockchain {
   pub chain: Vec<Block>,
   pub mpool: Vec<PendingBlock>,
@@ -165,15 +179,48 @@ impl Blockchain {
    * Retrieve users from the user registration blocks. This returns a hash map
    * with <public_key, username>.
    */
-  pub fn get_users(&self) -> HashMap<String, String> {
-    let mut map: HashMap<String, String> = HashMap::new();
+  pub fn get_users(&self) -> HashMap<String, User> {
+    let mut map: HashMap<String, User> = HashMap::new();
 
     for block in &self.chain {
-      if let BlockData::User { username, .. } = &block.data {
-        map.insert(block.public_key.clone(), username.clone());
+      if let BlockData::User {
+        username,
+        display_name,
+        ..
+      } = &block.data {
+        map.insert(block.public_key.clone(), User{
+          username:     username.to_string(),
+          display_name: display_name.to_string(),
+          public_key:   block.clone().public_key,
+        });
       }
     }
 
     map
+  }
+
+  /**
+   * Retrieve posts from the blockchain.
+   */
+  pub fn get_posts(&self) -> Vec<Post> {
+    let mut posts: Vec<Post> = vec![];
+    let users = self.get_users();
+
+    for block in &self.chain {
+      if let BlockData::Post { body, .. } = &block.data {
+        let author = users
+          .get(&block.public_key)
+          .cloned()
+          .unwrap();
+
+        posts.push(Post{
+          author,
+          body:      body.to_string(),
+          timestamp: block.timestamp,
+        });
+      }
+    }
+
+    posts
   }
 }
