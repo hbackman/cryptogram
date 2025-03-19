@@ -221,6 +221,7 @@ impl Blockchain {
       }
     }
 
+    posts.reverse();
     posts
   }
 }
