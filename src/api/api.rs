@@ -7,6 +7,7 @@ use std::sync::Arc;
 use crate::blockchain::chain::Blockchain;
 use crate::api::posts::post_routes;
 use crate::api::users::user_routes;
+use crate::api::links::link_routes;
 
 #[derive(Clone, Serialize)]
 struct HealthReply {}
@@ -23,10 +24,12 @@ pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
 
   let user_routes = user_routes(chain.clone());
   let post_routes = post_routes(chain.clone());
+  let link_routes = link_routes();
 
   let routes = health
     .or(user_routes)
     .or(post_routes)
+    .or(link_routes)
     .with(warp::cors()
       .allow_any_origin() // Allow any origin (for development)
       .allow_methods(vec!["GET", "POST"]) // Allow GET and POST requests

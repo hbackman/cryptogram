@@ -27,8 +27,9 @@ struct FeedReply {
 
 #[derive(Clone, Serialize)]
 struct PostReply {
-  post: Post,
-  replies: Vec<Post>,
+  post:     Post,
+  replies:  Vec<Post>,
+  reply_to: Option<Post>,
 }
 
 pub fn post_routes(chain: Arc<Mutex<Blockchain>>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -129,9 +130,15 @@ async fn handle_post_detail(hash: String, chain: Arc<Mutex<Blockchain>>) -> Resu
         .cloned()
         .collect();
 
+      let reply_to = posts
+        .iter()
+        .find(|p| post.reply.as_ref().map(|r| r == &p.hash).unwrap_or(false))
+        .cloned();
+
       Ok(warp::reply::json(&PostReply{
         post: post.to_owned(),
         replies,
+        reply_to,
       }))
     },
     None => {
