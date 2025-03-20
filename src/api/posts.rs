@@ -1,5 +1,6 @@
 use tokio::sync::Mutex;
 use serde::{Deserialize, Serialize};
+use serde_qs;
 use warp::http;
 use warp::Filter;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ pub struct PostRequest {
 
 #[derive(Debug, Deserialize)]
 struct FeedQuery {
-  user: Option<String>,
+  user: Option<Vec<String>>,
 }
 
 #[derive(Clone, Serialize)]
@@ -24,20 +25,33 @@ struct FeedReply {
   feed: Vec<Post>,
 }
 
+#[derive(Clone, Serialize)]
+struct PostReply {
+  post: Post,
+  replies: Vec<Post>,
+}
+
 pub fn post_routes(chain: Arc<Mutex<Blockchain>>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
   let feed = warp::path("feed")
     .and(warp::get())
-    .and(warp::query::<FeedQuery>())
+    .and(warp::query::raw())
     .and(with_chain(chain.clone()))
     .and_then(handle_feed);
 
-  let post = warp::path("post")
+  let post_create = warp::path("posts")
     .and(warp::post())
     .and(warp::body::json())
     .and(with_chain(chain.clone()))
-    .and_then(handle_post);
+    .and_then(handle_post_create);
 
-  feed.or(post)
+  let post_detail = warp::path!("posts" / String)
+    .and(warp::get())
+    .and(with_chain(chain.clone()))
+    .and_then(handle_post_detail);
+
+  feed
+    .or(post_create)
+    .or(post_detail)
 }
 
 fn with_chain(
@@ -49,14 +63,17 @@ fn with_chain(
 /**
  * Handle the feed endpoint.
  */
-async fn handle_feed(query: FeedQuery, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_feed(query: String, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
+  let query = serde_qs::from_str::<FeedQuery>(&query)
+    .unwrap();
+
   let chain = chain.lock().await;
   let posts = chain.get_posts();
 
   if let Some(user) = query.user {
     let posts: Vec<Post> = posts
         .into_iter()
-        .filter(|post| post.author.username == user)
+        .filter(|post| user.contains(&post.author.username))
         .collect();
 
     Ok(warp::reply::json(&FeedReply{
@@ -72,8 +89,10 @@ async fn handle_feed(query: FeedQuery, chain: Arc<Mutex<Blockchain>>) -> Result<
 /**
  * Handle a new post being made.
  */
-async fn handle_post(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_post_create(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
   let mut chain = chain.lock().await;
+
+  // todo: validate reply hash
 
   chain.push_mempool(PendingBlock::new(
     BlockData::Post {
@@ -88,4 +107,35 @@ async fn handle_post(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> Result<
     warp::reply(),
     http::StatusCode::NO_CONTENT
   ))
+}
+
+/**
+ * Handle a post detail.
+ */
+async fn handle_post_detail(hash: String, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
+  let chain = chain.lock().await;
+  let posts = chain.get_posts();
+
+  // todo: improve
+  let post = posts
+    .iter()
+    .find(|post| post.hash == hash);
+
+  match post {
+    Some(post) => {
+      let replies = posts
+        .iter()
+        .filter(|p| p.reply.as_ref().map(|r| r == &post.hash).unwrap_or(false))
+        .cloned()
+        .collect();
+
+      Ok(warp::reply::json(&PostReply{
+        post: post.to_owned(),
+        replies,
+      }))
+    },
+    None => {
+      Err(warp::reject::not_found())
+    }
+  }
 }

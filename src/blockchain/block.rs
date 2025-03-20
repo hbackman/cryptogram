@@ -52,6 +52,34 @@ impl PendingBlock {
       &self.data.to_string_for_signing()
     )
   }
+
+  /**
+   * Validate the block size.
+   */
+  pub fn validate_size(&self) -> Result<(), String> {
+    match &self.data {
+      BlockData::Post { body, .. } => {
+        if body.len() > 300 {
+          return Err("Post size exceeds 300 characters.".to_string());
+        }
+      },
+      BlockData::User { username, display_name, biography, .. } => {
+        if username.len() > 255 {
+          return Err("Username exceeds 255 characters.".to_string());
+        }
+
+        if display_name.len() > 255 {
+          return Err("Display name exceeds 255 characters.".to_string());
+        }
+
+        if biography.len() > 300 {
+          return Err("Biography exceeds 300 characters.".to_string());
+        }
+      }
+      _ => {}
+    }
+    Ok(())
+  }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

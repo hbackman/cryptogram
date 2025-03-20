@@ -14,3 +14,4 @@ clap = { version = "4", features = ["derive"] }
 ed25519-dalek = { version = "2.1.1", features = ["batch"] }
 hex = "0.4.3"
 thiserror = "2.0.12"
+serde_qs = "0.14.0"

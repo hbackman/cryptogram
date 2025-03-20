@@ -6,8 +6,10 @@ use crate::blockchain::block::{Block, BlockData, PendingBlock};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Post {
+  pub hash:      String,
   pub author:    User,
   pub body:      String,
+  pub reply:     Option<String>,
   pub timestamp: u64,
 }
 
@@ -52,6 +54,7 @@ impl Blockchain {
 
   pub fn push_mempool(&mut self, block: PendingBlock) -> Result<(), String> {
     block.validate_signature().map_err(|e| e.to_string())?;
+    block.validate_size()?;
 
     self.mpool.push(block);
 
@@ -207,7 +210,7 @@ impl Blockchain {
     let users = self.get_users();
 
     for block in &self.chain {
-      if let BlockData::Post { body, .. } = &block.data {
+      if let BlockData::Post { body, reply, .. } = &block.data {
         let author = users
           .get(&block.public_key)
           .cloned()
@@ -215,8 +218,10 @@ impl Blockchain {
 
         posts.push(Post{
           author,
+          reply:     reply.clone(),
           body:      body.to_string(),
-          timestamp: block.timestamp,
+          hash:      block.clone().hash,
+          timestamp: block.clone().timestamp,
         });
       }
     }
