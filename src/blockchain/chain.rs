@@ -17,6 +17,7 @@ pub struct Post {
 pub struct User {
   pub display_name: String,
   pub username:     String,
+  pub biography:    String,
   pub public_key:   String,
 }
 
@@ -189,11 +190,13 @@ impl Blockchain {
       if let BlockData::User {
         username,
         display_name,
+        biography,
         ..
       } = &block.data {
         map.insert(block.public_key.clone(), User{
           username:     username.to_string(),
           display_name: display_name.to_string(),
+          biography:    biography.to_string(),
           public_key:   block.clone().public_key,
         });
       }

@@ -76,30 +76,23 @@ async fn handle_user_post(req: UserRequest, chain: Arc<Mutex<Blockchain>>) -> Re
  */
 async fn handle_user_get(username: String, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
   let chain = chain.lock().await;
+  let users = chain.get_users();
 
-  if let Some(block) = chain
-    .chain
-    .iter()
-    .find(|block| {
-      matches!(&block.data, BlockData::User { username: u, .. } if u == &username)
-    }) {
-    if let BlockData::User {
-      username,
-      biography,
-      display_name,
-    } = &block.data {
-      return Ok(warp::reply::json(
-        &User{
-          display_name: display_name.clone(),
-          username:     username.clone(),
-          biography:    biography.clone(),
-          public_key:   block.public_key.clone(),
-        }
-      ));
-    }
+  if let Some(user) = users
+    .values()
+    .find(|user| user.username == username) {
+
+    Ok(warp::reply::json(
+      &User{
+        display_name: user.clone().display_name,
+        username:     user.clone().username,
+        biography:    user.clone().biography,
+        public_key:   user.clone().public_key,
+      }
+    ))
+  } else {
+    Err(warp::reject::not_found())
   }
-
-  Err(warp::reject::not_found())
 }
 
 /**
@@ -107,31 +100,18 @@ async fn handle_user_get(username: String, chain: Arc<Mutex<Blockchain>>) -> Res
  */
 async fn handle_user_search(search: String, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
   let chain = chain.lock().await;
+  let users = chain.get_users();
 
-  let matching_users: Vec<User> = chain
-    .chain
-    .iter()
-    .filter_map(|block| {
-      if let BlockData::User {
-        username,
-        biography,
-        display_name,
-      } = &block.data {
-        if username.to_lowercase().contains(&search.to_lowercase()) {
-          Some(User {
-            display_name: display_name.clone(),
-            username:     username.clone(),
-            biography:    biography.clone(),
-            public_key:   block.public_key.clone(),
-          })
-        } else {
-          None
-        }
-      } else {
-        None
-      }
+  let matching: Vec<User> = users
+    .values()
+    .filter(|user| user.username.to_lowercase().contains(&search.to_lowercase()))
+    .map   (|user| User {
+      display_name: user.clone().display_name,
+      username:     user.clone().username,
+      biography:    user.clone().biography,
+      public_key:   user.clone().public_key,
     })
     .collect();
 
-  Ok(warp::reply::json(&matching_users))
+  Ok(warp::reply::json(&matching))
 }
