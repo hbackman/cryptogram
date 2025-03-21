@@ -9,7 +9,7 @@ use crate::p2p::gossip;
 use crate::p2p::input;
 use crate::blockchain::block::Block;
 use crate::blockchain::chain::Blockchain;
-use crate::p2p::message::{Message, MessageType};
+use crate::p2p::message::{Message, MessageData};
 
 /**
  * Start the p2p node.
@@ -56,73 +56,47 @@ async fn handle_client(node: Arc<Node>, socket: TcpStream) {
  * Handle a peer message.
  */
 async fn handle_message(node: Arc<Node>, message: Message) {
-  match message.msg_type {
-    MessageType::Chat => {
-      println!("[{}] {}", message.sender, message.payload);
-    }
-    MessageType::PeerDiscovery => {
-      let peers_json = serde_json::to_string(
-        &node.get_peers().await
-      ).unwrap();
-
-      node.send(&message.sender, &Message{
-        msg_type: MessageType::PeerGossip,
-        sender: node.get_local_addr(),
-        payload: peers_json.to_string(),
+  match message.payload {
+    MessageData::Chat { message: msg } => {
+      println!("[{}] {}", message.sender, msg);
+    },
+    MessageData::PeerDiscovery {} => {
+      node.send(&message.sender, &MessageData::PeerGossip {
+        peers: node.get_peers().await,
       }).await;
-    }
-    MessageType::PeerGossip => {
-      match serde_json::from_str::<Vec<String>>(&message.payload) {
-        Ok(new_peers) => {
-          for peer in new_peers {
-            node.add_peer(&peer).await;
-          }
-        }
-        Err(e) => {
-          println!("Failed to parse peer list: {}", e);
-        }
+    },
+    MessageData::PeerGossip { peers } => {
+      for peer in peers {
+        node.add_peer(&peer).await;
       }
     },
-    MessageType::BlockchainRequest => {
+    MessageData::BlockchainRequest {} => {
       println!("BlockchainRequest");
 
-      let chain = node.chain.lock().await;
-
-      node.send(&message.sender, &Message{
-        msg_type: MessageType::BlockchainReply,
-        sender: node.get_local_addr(),
-        payload: chain.to_json(false),
+      node.send(&message.sender, &MessageData::BlockchainReply {
+        chain: node.chain
+          .lock()
+          .await
+          .chain
+          .clone(),
       }).await;
     },
-    MessageType::BlockchainReply => {
-      match serde_json::from_str::<Vec<Block>>(&message.payload) {
-        Ok(new_chain) => {
-          node.chain.lock()
-            .await
-            .update(new_chain);
+    MessageData::BlockchainReply { chain } => {
+      node.chain
+        .lock()
+        .await
+        .update(chain);
 
-          println!("BlockchainReply: Updated blockchain.");
-        }
-        Err(e) => {
-          println!("BlockchainReply: Parsing Error: {}", e);
-        }
-      }
+      println!("BlockchainReply: Updated blockchain.");
     },
-    MessageType::BlockchainTx => {
-       match serde_json::from_str::<Block>(&message.payload) {
-         Ok(block) => {
-           println!("BlockchainTx: {:?}", block);
+    MessageData::BlockchainTx { block } => {
+      println!("BlockchainTx: {:?}", block);
 
-           node.chain
-             .lock()
-             .await
-             .add_block(block)
-             .unwrap_or_else(|e| println!("{}", e));
-         },
-         Err(e) => {
-           println!("BlockchainTx: Parsing Error: {}", e);
-         }
-       }
+      node.chain
+        .lock()
+        .await
+        .add_block(block)
+        .unwrap_or_else(|e| println!("{}", e));
     },
   }
 }
@@ -161,10 +135,8 @@ pub async fn handle_mempool_blocks(node: Arc<Node>) {
 
       println!("Processed block: {:?}", block);
 
-      node.yell(&Message{
-        msg_type: MessageType::BlockchainTx,
-        sender: node.get_local_addr(),
-        payload: block.to_json(),
+      node.yell(&MessageData::BlockchainTx {
+        block,
       }).await;
     }
 

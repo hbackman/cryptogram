@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use crate::p2p::node::Node;
-use crate::p2p::message::{Message, MessageType};
+use crate::p2p::message::MessageData;
 
 pub async fn handle_user_input(node: Arc<Node>) {
   let mut reader = BufReader::new(tokio::io::stdin());
@@ -13,10 +13,8 @@ pub async fn handle_user_input(node: Arc<Node>) {
 
     match input.split_whitespace().collect::<Vec<&str>>().as_slice() {
       ["/send", message @ ..] => {
-        node.yell(&Message{
-          msg_type: MessageType::Chat,
-          sender: node.get_local_addr(),
-          payload: message.join(" "),
+        node.yell(&MessageData::Chat {
+          message: message.join(" "),
         }).await;
       },
       ["/connect", peer] => {
@@ -61,19 +59,9 @@ async fn handle_peer_connect(node: Arc<Node>, peer: &str) {
 
   node.add_peer(&peer).await;
 
-  // Ask peer for its peers.
-  node.send(&peer, &Message{
-    msg_type: MessageType::PeerDiscovery,
-    sender: node.get_local_addr(),
-    payload: "".to_string(),
-  }).await;
-
-  // Ask peer for its blockchain.
-  node.send(&peer, &Message{
-    msg_type: MessageType::BlockchainRequest,
-    sender: node.get_local_addr(),
-    payload: "".to_string(),
-  }).await;
+  // Ask peer for its peers and blockchain.
+  node.send(&peer, &MessageData::PeerDiscovery {}).await;
+  node.send(&peer, &MessageData::BlockchainRequest {}).await;
 }
 
 /**
@@ -110,11 +98,7 @@ async fn handle_chain_listing(node: Arc<Node>) {
 async fn handle_chain_syncing(node: Arc<Node>) {
   let peer = node.get_random_peer().await.unwrap();
 
-  node.send(&peer, &Message{
-    msg_type: MessageType::BlockchainRequest,
-    sender: node.get_local_addr(),
-    payload: "".to_string(),
-  }).await;
+  node.send(&peer, &MessageData::BlockchainRequest {}).await;
 
   println!("requesting blockchain sync");
 }

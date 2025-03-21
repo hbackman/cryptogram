@@ -2,7 +2,7 @@ use tokio::time::{sleep, Duration};
 use std::sync::Arc;
 use rand::seq::SliceRandom;
 use crate::p2p::node::Node;
-use crate::p2p::message::{Message, MessageType};
+use crate::p2p::message::MessageData;
 
 pub async fn handle_peer_gossip(node: Arc<Node>) {
   loop {
@@ -22,10 +22,8 @@ pub async fn handle_peer_gossip(node: Arc<Node>) {
       .collect();
 
     // Create a gossip message
-    let gossip_message = Message {
-        msg_type: MessageType::PeerGossip,
-        sender: node.get_local_addr(), // Replace with actual address
-        payload: serde_json::to_string(&known_peers).unwrap(),
+    let gossip_message = MessageData::PeerGossip {
+      peers: known_peers,
     };
 
     drop(peers_guard); // Unlock before sending messages

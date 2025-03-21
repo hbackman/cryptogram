@@ -194,11 +194,4 @@ impl Block {
   pub fn difficulty(&self) -> usize {
     3
   }
-
-  /**
-   * Serialize to json.
-   */
-  pub fn to_json(&self) -> String {
-    serde_json::to_string(&self).unwrap()
-  }
 }

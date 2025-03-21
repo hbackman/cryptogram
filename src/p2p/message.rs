@@ -1,22 +1,31 @@
 use serde::{Serialize, Deserialize};
+use crate::blockchain::block::Block;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum MessageType {
+#[serde(tag = "type")]
+pub enum MessageData {
   // Misc
-  Chat,
+  Chat {
+    message: String,
+  },
   // Peers
-  PeerDiscovery,
-  PeerGossip,
+  PeerDiscovery {},
+  PeerGossip {
+    peers: Vec<String>
+  },
   // Blockchain
-  BlockchainRequest,
-  BlockchainReply,
-  BlockchainTx,
+  BlockchainRequest {},
+  BlockchainReply {
+    chain: Vec<Block>,
+  },
+  BlockchainTx {
+    block: Block,
+  },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message
 {
-    pub msg_type: MessageType,
     pub sender: String,
-    pub payload: String,
+    pub payload: MessageData,
 }

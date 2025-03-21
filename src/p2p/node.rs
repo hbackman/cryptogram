@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::collections::HashSet;
 use rand::seq::IteratorRandom;
 use crate::p2p::message::Message;
+use crate::p2p::message::MessageData;
 use crate::blockchain::chain::Blockchain;
 
 #[derive(Debug, Clone)]
@@ -72,16 +73,21 @@ impl Node {
    * Retrive a random peer.
    */
   pub async fn get_random_peer(&self) -> Option<String> {
-      let peers_guard = self.peers.lock().await;
+    let peers_guard = self.peers.lock().await;
 
-      // Pick a random peer from the HashSet
-      peers_guard.iter().choose(&mut rand::thread_rng()).cloned()
+    // Pick a random peer from the HashSet
+    peers_guard.iter().choose(&mut rand::thread_rng()).cloned()
   }
 
   /**
    * Send message to a peer.
    */
-  pub async fn send(&self, peer: &str, message: &Message) {
+  pub async fn send(&self, peer: &str, payload: &MessageData) {
+    let message = Message {
+      payload: payload.to_owned(),
+      sender: self.get_local_addr(),
+    };
+
     if let Ok(mut stream) = TcpStream::connect(peer).await {
       let json_msg = serde_json::to_string(&message).unwrap();
 
@@ -98,10 +104,10 @@ impl Node {
   /**
    * Send message to all peers.
    */
-  pub async fn yell(&self, message: &Message) {
+  pub async fn yell(&self, payload: &MessageData) {
     let peers = self.peers.lock().await.clone();
     for peer in peers.iter() {
-      self.send(peer, message).await;
+      self.send(peer, payload).await;
     }
   }
 }
