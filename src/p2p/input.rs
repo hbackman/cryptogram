@@ -60,8 +60,13 @@ async fn handle_peer_connect(node: Arc<Node>, peer: &str) {
   node.add_peer(&peer).await;
 
   // Ask peer for its peers and blockchain.
+  let chain_at = node.chain
+    .lock()
+    .await
+    .len();
+
   node.send(&peer, &MessageData::PeerDiscovery {}).await;
-  node.send(&peer, &MessageData::BlockchainRequest {}).await;
+  node.send(&peer, &MessageData::BlockRequest {index: chain_at}).await;
 }
 
 /**
@@ -98,7 +103,12 @@ async fn handle_chain_listing(node: Arc<Node>) {
 async fn handle_chain_syncing(node: Arc<Node>) {
   let peer = node.get_random_peer().await.unwrap();
 
-  node.send(&peer, &MessageData::BlockchainRequest {}).await;
+  node.send(&peer, &MessageData::BlockRequest {
+    index: node.chain
+      .lock()
+      .await
+      .len(),
+  }).await;
 
   println!("requesting blockchain sync");
 }

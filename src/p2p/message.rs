@@ -13,14 +13,11 @@ pub enum MessageData {
   PeerGossip {
     peers: Vec<String>
   },
-  // Blockchain
-  BlockchainRequest {},
-  BlockchainReply {
-    chain: Vec<Block>,
-  },
   BlockchainTx {
     block: Block,
   },
+  BlockRequest { index: usize },
+  BlockResponse { block: Block },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

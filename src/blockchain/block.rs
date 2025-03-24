@@ -181,6 +181,11 @@ impl Block {
    * Validate the block signature.
    */
   pub fn validate_signature(&self) -> Result<(), ValidationError> {
+    // Genesis block is not signed.
+    if self.index == 0 {
+      return Ok(())
+    }
+
     validate_signature(
       &self.public_key,
       &self.signature,

@@ -40,6 +40,20 @@ impl Blockchain {
   }
 
   /**
+   * Retrieve the size of the chain.
+   */
+  pub fn len(&self) -> usize {
+    self.chain.len()
+  }
+
+  /**
+   * Retrieve a block at the given index.
+   */
+  pub fn at(&self, index: usize) -> Option<Block> {
+    self.chain.get(index).cloned()
+  }
+
+  /**
    * Add a block to the chain.
    */
   pub fn add_block(&mut self, block: Block) -> Result<(), String> {
@@ -53,6 +67,9 @@ impl Blockchain {
     Ok(())
   }
 
+  /**
+   * Add a block to the memory pool.
+   */
   pub fn push_mempool(&mut self, block: PendingBlock) -> Result<(), String> {
     block.validate_signature().map_err(|e| e.to_string())?;
     block.validate_size()?;

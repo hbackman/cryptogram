@@ -34,9 +34,9 @@ async fn main() {
 }
 
 fn cli() -> Command {
-  Command::new("p2p")
+  Command::new("Cryptogram")
     .version("1.0")
-    .about("a p2p test app")
+    .about("A decentralized microblogging platform on blockchain.")
     .args([
       Arg::new("port")
         .long("port")
