@@ -17,12 +17,14 @@ pub struct PostRequest {
 
 #[derive(Debug, Deserialize)]
 struct FeedQuery {
-  user: Option<Vec<String>>,
+  user:   Option<Vec<String>>,
+  limit:  Option<usize>,
+  offset: Option<usize>,
 }
 
 #[derive(Clone, Serialize)]
 struct FeedReply {
-  feed: Vec<Post>,
+  feed: Vec<PostReply>,
 }
 
 #[derive(Clone, Serialize)]
@@ -72,15 +74,27 @@ async fn handle_feed(query: String, chain: Arc<Mutex<Blockchain>>) -> Result<imp
   let posts = chain.get_posts();
 
   if let Some(user) = query.user {
-    let posts: Vec<Post> = posts
-        .into_iter()
-        .filter(|post| user.contains(&post.author.username))
-        .collect();
+    let posts = posts
+      .clone()
+      .into_iter()
+      .filter(|post| user.contains(&post.author.username))
+      .skip(query.offset.unwrap_or(0))
+      .take(query.limit.unwrap_or(32))
+      .map(|post| hydrate_post(post.clone(), posts.clone()))
+      .collect();
 
     Ok(warp::reply::json(&FeedReply{
       feed: posts,
     }))
   } else {
+    let posts = posts
+      .clone()
+      .into_iter()
+      .skip(query.offset.unwrap_or(0))
+      .take(query.limit.unwrap_or(32))
+      .map(|post| hydrate_post(post.clone(), posts.clone()))
+      .collect();
+
     Ok(warp::reply::json(&FeedReply{
       feed: posts,
     }))
@@ -124,25 +138,31 @@ async fn handle_post_detail(hash: String, chain: Arc<Mutex<Blockchain>>) -> Resu
 
   match post {
     Some(post) => {
-      let replies = posts
-        .iter()
-        .filter(|p| p.reply.as_ref().map(|r| r == &post.hash).unwrap_or(false))
-        .cloned()
-        .collect();
-
-      let reply_to = posts
-        .iter()
-        .find(|p| post.reply.as_ref().map(|r| r == &p.hash).unwrap_or(false))
-        .cloned();
-
-      Ok(warp::reply::json(&PostReply{
-        post: post.to_owned(),
-        replies,
-        reply_to,
-      }))
+      Ok(warp::reply::json(
+        &hydrate_post(post.clone(), posts.clone())
+      ))
     },
     None => {
       Err(warp::reject::not_found())
     }
+  }
+}
+
+fn hydrate_post(post: Post, posts: Vec<Post>) -> PostReply {
+  let replies = posts
+    .iter()
+    .filter(|p| p.reply.as_ref().map(|r| r == &post.hash).unwrap_or(false))
+    .cloned()
+    .collect();
+
+  let reply_to = posts
+    .iter()
+    .find(|p| post.reply.as_ref().map(|r| r == &p.hash).unwrap_or(false))
+    .cloned();
+
+  PostReply {
+    post,
+    replies,
+    reply_to,
   }
 }
