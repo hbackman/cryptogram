@@ -21,3 +21,7 @@ Contributions are welcome! Feel free to fork, submit PRs, or open issues.
   - Retweets
 - Users
   - Images?
+
+```
+brew install leveldb
+```

@@ -1,7 +1,7 @@
 use serde::Serialize;
-use std::fs;
 use std::collections::HashSet;
 use std::collections::HashMap;
+use crate::blockchain::store::Storage;
 use crate::blockchain::block::{Block, BlockData, PendingBlock};
 
 #[derive(Debug, Clone, Serialize)]
@@ -23,16 +23,22 @@ pub struct User {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Blockchain {
-  pub chain: Vec<Block>,
   pub mpool: Vec<PendingBlock>,
+  #[serde(skip_serializing)]
+  pub store: Storage,
 }
 
 impl Blockchain {
   pub fn new() -> Self {
-    Self {
-      chain: vec![Blockchain::genesis()],
+    let mut chain = Self {
       mpool: vec![],
-    }
+      store: Storage::new().unwrap(),
+    };
+
+    chain.add_block(Blockchain::genesis())
+      .unwrap_or_else(|e| println!("{}", e));
+
+    chain
   }
 
   fn genesis() -> Block {
@@ -43,26 +49,30 @@ impl Blockchain {
    * Retrieve the size of the chain.
    */
   pub fn len(&self) -> usize {
-    self.chain.len()
+    self.store.get_height().unwrap() as usize
   }
 
   /**
    * Retrieve a block at the given index.
    */
   pub fn at(&self, index: usize) -> Option<Block> {
-    self.chain.get(index).cloned()
+    self.store
+      .get_block(index as u64)
+      .unwrap()
   }
 
   /**
    * Add a block to the chain.
    */
   pub fn add_block(&mut self, block: Block) -> Result<(), String> {
-    block.validate_signature().map_err(|e| e.to_string())?;
+    if block.index > 0 {
+      block.validate_signature().map_err(|e| e.to_string())?;
 
-    self.validate_hash(&block)?;
-    self.validate_user(&block)?;
+      self.validate_hash(&block)?;
+      self.validate_user(&block)?;
+    }
 
-    self.chain.push(block);
+    let _ = self.store.put_block(block);
 
     Ok(())
   }
@@ -85,7 +95,7 @@ impl Blockchain {
    */
   fn validate_hash(&self, block: &Block) -> Result<(), String> {
     let target = "0".repeat(block.difficulty());
-    let lblock = self.latest_block();
+    let lblock = self.top_block();
 
     if block.prev_hash != lblock.hash {
       return Err("Block hash did not match previous hash.".to_string());
@@ -106,7 +116,11 @@ impl Blockchain {
     let mut user_names: HashSet<String> = HashSet::new();
     let mut user_pkeys: HashSet<String> = HashSet::new();
 
-    for block in &self.chain {
+    for i in 0..=self.store.get_height().unwrap() {
+      let block = self.store.get_block(i)
+        .unwrap()
+        .unwrap();
+
       if let BlockData::User { username, .. } = &block.data {
         user_names.insert(username.clone());
         user_pkeys.insert(block.public_key.clone());
@@ -141,58 +155,21 @@ impl Blockchain {
   /**
    * Retrieve the latest block.
    */
-  pub fn latest_block(&self) -> &Block {
-    self.chain.last().unwrap()
+  pub fn top_block(&self) -> Block {
+    self.store.top_block().unwrap()
   }
 
   /**
-   * Serialize to json.
+   * Print the chain to stdout.
    */
-  pub fn to_json(&self, pretty: bool) -> String {
-    if pretty {
-      serde_json::to_string_pretty(&self.chain).unwrap()
-    } else {
-      serde_json::to_string(&self.chain).unwrap()
-    }
-  }
+  pub fn print_chain(&self) {
+    println!("==================================================================================");
+    for block in self.chain_iter() {
+      let json = serde_json::to_string_pretty(&block)
+        .unwrap();
 
-  /**
-   * Update the blockchain.
-   */
-  pub fn update(&mut self, chain: Vec<Block>) {
-    let first0 = self.chain.first().unwrap();
-    let first1 =      chain.first().unwrap();
-
-    // If the genesis block is different, or the new chain is longer, then
-    // accept the new chain instead.
-    if first0.hash != first1.hash || chain.len() > self.chain.len() {
-      self.chain = chain;
-    }
-  }
-
-  /**
-   * Save the blockchain to the filesystem.
-   */
-  pub fn save_to_file(&self, filename: &str) {
-    fs::write(filename, self.to_json(true))
-      .expect("Failed to save blockchain.");
-  }
-
-  /**
-   * Load the blockchain from the filesystem.
-   */
-  pub fn load_from_file(filename: &str) -> Self {
-    match fs::read_to_string(filename) {
-      Ok(dt) => {
-        match serde_json::from_str::<Vec<Block>>(&dt) {
-          Ok(chain) => Self{
-            chain,
-            mpool: vec![],
-          },
-          Err(_)    => panic!("Failed to parse blockchain json."),
-        }
-      },
-      Err(_) => Self::new(),
+      println!("{}", json);
+      println!("==================================================================================");
     }
   }
 
@@ -203,7 +180,7 @@ impl Blockchain {
   pub fn get_users(&self) -> HashMap<String, User> {
     let mut map: HashMap<String, User> = HashMap::new();
 
-    for block in &self.chain {
+    for block in self.chain_iter() {
       if let BlockData::User {
         username,
         display_name,
@@ -229,7 +206,7 @@ impl Blockchain {
     let mut posts: Vec<Post> = vec![];
     let users = self.get_users();
 
-    for block in &self.chain {
+    for block in self.chain_iter() {
       if let BlockData::Post { body, reply, .. } = &block.data {
         let author = users
           .get(&block.public_key)
@@ -248,5 +225,17 @@ impl Blockchain {
 
     posts.reverse();
     posts
+  }
+
+  pub fn chain_iter(&self) -> impl Iterator<Item = Block> + '_ {
+    let height = self.store
+      .get_height()
+      .unwrap();
+
+    (0..=height).map(move |i| {
+      self.store.get_block(i)
+        .unwrap()
+        .unwrap()
+    })
   }
 }

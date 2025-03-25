@@ -29,14 +29,6 @@ pub async fn handle_user_input(node: Arc<Node>) {
       ["/chain"] => {
         handle_chain_listing(node.clone()).await;
       },
-      ["/save"] => {
-        node.chain
-          .lock()
-          .await
-          .save_to_file("blockchain.json");
-
-        println!("Saved blockchain to disk.");
-      },
       _ => {
         println!("Commands:");
         println!("  /send <MESSAGE> - Broadcast a message to all peers");
@@ -89,11 +81,10 @@ async fn handle_peer_listing(node: Arc<Node>) {
  * Handle listing blockchain contents.
  */
 async fn handle_chain_listing(node: Arc<Node>) {
-  let chain = node.chain.lock()
+  node.chain
+    .lock()
     .await
-    .to_json(true);
-
-  println!("{}", chain);
+    .print_chain();
 }
 
 /**

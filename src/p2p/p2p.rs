@@ -136,7 +136,7 @@ pub async fn handle_mempool_blocks(node: Arc<Node>) {
 
       let mut chain = node.chain.lock().await;
       let mut block = Block::next(
-        chain.latest_block(),
+        &chain.top_block(),
         pending_block.data
       );
 

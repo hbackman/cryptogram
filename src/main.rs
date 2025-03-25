@@ -24,7 +24,7 @@ async fn main() {
   }
 
   let chain = Arc::new(Mutex::new(
-    Blockchain::load_from_file("blockchain.json")
+    Blockchain::new()
   ));
 
   tokio::join!(
