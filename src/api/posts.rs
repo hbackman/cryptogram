@@ -24,7 +24,7 @@ struct FeedQuery {
 
 #[derive(Clone, Serialize)]
 struct FeedReply {
-  feed: Vec<PostReply>,
+  feed: Vec<Post>,
 }
 
 #[derive(Clone, Serialize)]
@@ -71,34 +71,43 @@ async fn handle_feed(query: String, chain: Arc<Mutex<Blockchain>>) -> Result<imp
     .unwrap();
 
   let chain = chain.lock().await;
-  let posts = chain.get_posts();
 
-  if let Some(user) = query.user {
-    let posts = posts
-      .clone()
-      .into_iter()
-      .filter(|post| user.contains(&post.author.username))
-      .skip(query.offset.unwrap_or(0))
-      .take(query.limit.unwrap_or(32))
-      .map(|post| hydrate_post(post.clone(), posts.clone()))
-      .collect();
+  let feed = chain.index.get_feed(
+    query.user.unwrap_or(vec![]),
+    query.limit.unwrap_or(32),
+    query.offset.unwrap_or(0)
+  ).unwrap();
 
-    Ok(warp::reply::json(&FeedReply{
-      feed: posts,
-    }))
-  } else {
-    let posts = posts
-      .clone()
-      .into_iter()
-      .skip(query.offset.unwrap_or(0))
-      .take(query.limit.unwrap_or(32))
-      .map(|post| hydrate_post(post.clone(), posts.clone()))
-      .collect();
+  Ok(warp::reply::json(&FeedReply{
+    feed
+  }))
 
-    Ok(warp::reply::json(&FeedReply{
-      feed: posts,
-    }))
-  }
+//   if let Some(user) = query.user {
+//     let posts = posts
+//       .clone()
+//       .into_iter()
+//       .filter(|post| user.contains(&post.author.username))
+//       .skip(query.offset.unwrap_or(0))
+//       .take(query.limit.unwrap_or(32))
+//       .map(|post| hydrate_post(post.clone(), posts.clone()))
+//       .collect();
+//
+//     Ok(warp::reply::json(&FeedReply{
+//       feed: posts,
+//     }))
+//   } else {
+//     let posts = posts
+//       .clone()
+//       .into_iter()
+//       .skip(query.offset.unwrap_or(0))
+//       .take(query.limit.unwrap_or(32))
+//       .map(|post| hydrate_post(post.clone(), posts.clone()))
+//       .collect();
+//
+//     Ok(warp::reply::json(&FeedReply{
+//       feed: posts,
+//     }))
+//   }
 }
 
 /**
@@ -129,23 +138,39 @@ async fn handle_post_create(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> 
  */
 async fn handle_post_detail(hash: String, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
   let chain = chain.lock().await;
-  let posts = chain.get_posts();
 
-  // todo: improve
-  let post = posts
-    .iter()
-    .find(|post| post.hash == hash);
-
-  match post {
-    Some(post) => {
-      Ok(warp::reply::json(
-        &hydrate_post(post.clone(), posts.clone())
-      ))
+  match chain.index.get_post(hash) {
+    Ok(post) => {
+      Ok(warp::reply::json(&PostReply{
+        post,
+        reply_to: None,
+        replies: vec![],
+      }))
     },
-    None => {
+    Err(_) => {
       Err(warp::reject::not_found())
     }
   }
+
+
+
+//  let posts = chain.get_posts();
+//
+//  // todo: improve
+//  let post = posts
+//    .iter()
+//    .find(|post| post.hash == hash);
+//
+//  match post {
+//    Some(post) => {
+//      Ok(warp::reply::json(
+//        &hydrate_post(post.clone(), posts.clone())
+//      ))
+//    },
+//    None => {
+//      Err(warp::reject::not_found())
+//    }
+//  }
 }
 
 fn hydrate_post(post: Post, posts: Vec<Post>) -> PostReply {

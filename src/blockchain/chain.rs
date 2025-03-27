@@ -1,7 +1,8 @@
 use serde::Serialize;
 use std::collections::HashSet;
 use std::collections::HashMap;
-use crate::blockchain::store::Storage;
+use crate::blockchain::store::Store;
+use crate::blockchain::index::Index;
 use crate::blockchain::block::{Block, BlockData, PendingBlock};
 
 #[derive(Debug, Clone, Serialize)]
@@ -21,22 +22,28 @@ pub struct User {
   pub public_key:   String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug)]
 pub struct Blockchain {
   pub mpool: Vec<PendingBlock>,
-  #[serde(skip_serializing)]
-  pub store: Storage,
+  pub store: Store,
+  pub index: Index,
 }
 
 impl Blockchain {
   pub fn new() -> Self {
     let mut chain = Self {
       mpool: vec![],
-      store: Storage::new().unwrap(),
+      store: Store::new().unwrap(),
+      index: Index::new(),
     };
 
     chain.add_block(Blockchain::genesis())
       .unwrap_or_else(|e| println!("{}", e));
+
+    // Catch the index up.
+    for block in chain.chain_iter() {
+      let _ = chain.index.add_block(block);
+    }
 
     chain
   }
@@ -72,7 +79,8 @@ impl Blockchain {
       self.validate_user(&block)?;
     }
 
-    let _ = self.store.put_block(block);
+    let _ = self.store.put_block(block.clone());
+    let _ = self.index.add_block(block);
 
     Ok(())
   }
@@ -197,34 +205,6 @@ impl Blockchain {
     }
 
     map
-  }
-
-  /**
-   * Retrieve posts from the blockchain.
-   */
-  pub fn get_posts(&self) -> Vec<Post> {
-    let mut posts: Vec<Post> = vec![];
-    let users = self.get_users();
-
-    for block in self.chain_iter() {
-      if let BlockData::Post { body, reply, .. } = &block.data {
-        let author = users
-          .get(&block.public_key)
-          .cloned()
-          .unwrap();
-
-        posts.push(Post{
-          author,
-          reply:     reply.clone(),
-          body:      body.to_string(),
-          hash:      block.clone().hash,
-          timestamp: block.clone().timestamp,
-        });
-      }
-    }
-
-    posts.reverse();
-    posts
   }
 
   pub fn chain_iter(&self) -> impl Iterator<Item = Block> + '_ {

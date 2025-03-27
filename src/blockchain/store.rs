@@ -6,12 +6,12 @@ use byteorder::NativeEndian;
 use crate::blockchain::block::Block;
 
 #[derive(Debug, Clone)]
-pub struct Storage {
+pub struct Store {
   pub env: Env,
   pub db: Database<U64<NativeEndian>, SerdeJson<Block>>,
 }
 
-impl Storage {
+impl Store {
   pub fn new() -> heed::Result<Self> {
     let env = unsafe {
       EnvOpenOptions::new()
