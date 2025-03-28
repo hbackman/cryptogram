@@ -4,8 +4,9 @@ use serde_qs;
 use warp::http;
 use warp::Filter;
 use std::sync::Arc;
-use crate::blockchain::chain::{Blockchain, Post};
+use crate::blockchain::chain::Blockchain;
 use crate::blockchain::block::{BlockData, PendingBlock};
+use crate::blockchain::index::PostDetail;
 
 #[derive(Clone, Deserialize)]
 pub struct PostRequest {
@@ -24,14 +25,7 @@ struct FeedQuery {
 
 #[derive(Clone, Serialize)]
 struct FeedReply {
-  feed: Vec<Post>,
-}
-
-#[derive(Clone, Serialize)]
-struct PostReply {
-  post:     Post,
-  replies:  Vec<Post>,
-  reply_to: Option<Post>,
+  feed: Vec<PostDetail>,
 }
 
 pub fn post_routes(chain: Arc<Mutex<Blockchain>>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -71,43 +65,19 @@ async fn handle_feed(query: String, chain: Arc<Mutex<Blockchain>>) -> Result<imp
     .unwrap();
 
   let chain = chain.lock().await;
-
-  let feed = chain.index.get_feed(
+  let feed  = chain.index.get_feed(
     query.user.unwrap_or(vec![]),
     query.limit.unwrap_or(32),
     query.offset.unwrap_or(0)
   ).unwrap();
 
-  Ok(warp::reply::json(&FeedReply{
+  let feed = chain.index
+    .hydrate_feed(feed)
+    .map_err(|_| warp::reject::reject())?;
+
+  Ok(warp::reply::json(&FeedReply {
     feed
   }))
-
-//   if let Some(user) = query.user {
-//     let posts = posts
-//       .clone()
-//       .into_iter()
-//       .filter(|post| user.contains(&post.author.username))
-//       .skip(query.offset.unwrap_or(0))
-//       .take(query.limit.unwrap_or(32))
-//       .map(|post| hydrate_post(post.clone(), posts.clone()))
-//       .collect();
-//
-//     Ok(warp::reply::json(&FeedReply{
-//       feed: posts,
-//     }))
-//   } else {
-//     let posts = posts
-//       .clone()
-//       .into_iter()
-//       .skip(query.offset.unwrap_or(0))
-//       .take(query.limit.unwrap_or(32))
-//       .map(|post| hydrate_post(post.clone(), posts.clone()))
-//       .collect();
-//
-//     Ok(warp::reply::json(&FeedReply{
-//       feed: posts,
-//     }))
-//   }
 }
 
 /**
@@ -139,55 +109,12 @@ async fn handle_post_create(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> 
 async fn handle_post_detail(hash: String, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
   let chain = chain.lock().await;
 
-  match chain.index.get_post(hash) {
-    Ok(post) => {
-      Ok(warp::reply::json(&PostReply{
-        post,
-        reply_to: None,
-        replies: vec![],
-      }))
-    },
-    Err(_) => {
-      Err(warp::reject::not_found())
-    }
-  }
+  let post = chain.index.get_post(&hash)
+      .map_err(|_| warp::reject::not_found())?
+      .ok_or_else(|| warp::reject::not_found())?;
 
+  let hydrated = chain.index.hydrate_post(post)
+      .map_err(|_| warp::reject::not_found())?;
 
-
-//  let posts = chain.get_posts();
-//
-//  // todo: improve
-//  let post = posts
-//    .iter()
-//    .find(|post| post.hash == hash);
-//
-//  match post {
-//    Some(post) => {
-//      Ok(warp::reply::json(
-//        &hydrate_post(post.clone(), posts.clone())
-//      ))
-//    },
-//    None => {
-//      Err(warp::reject::not_found())
-//    }
-//  }
-}
-
-fn hydrate_post(post: Post, posts: Vec<Post>) -> PostReply {
-  let replies = posts
-    .iter()
-    .filter(|p| p.reply.as_ref().map(|r| r == &post.hash).unwrap_or(false))
-    .cloned()
-    .collect();
-
-  let reply_to = posts
-    .iter()
-    .find(|p| post.reply.as_ref().map(|r| r == &p.hash).unwrap_or(false))
-    .cloned();
-
-  PostReply {
-    post,
-    replies,
-    reply_to,
-  }
+  Ok(warp::reply::json(&hydrated))
 }

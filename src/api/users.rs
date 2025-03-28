@@ -1,5 +1,5 @@
 use tokio::sync::Mutex;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use warp::http;
 use warp::Filter;
 use std::sync::Arc;
@@ -13,14 +13,6 @@ pub struct UserRequest {
   biography:    String,
   public_key:   String,
   signature:    String,
-}
-
-#[derive(Clone, Serialize)]
-struct User {
-  display_name: String,
-  username:     String,
-  biography:    String,
-  public_key:   String,
 }
 
 pub fn user_routes(chain: Arc<Mutex<Blockchain>>) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -76,23 +68,11 @@ async fn handle_user_post(req: UserRequest, chain: Arc<Mutex<Blockchain>>) -> Re
  */
 async fn handle_user_get(username: String, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
   let chain = chain.lock().await;
-  let users = chain.get_users();
+  let user = chain.index.get_user(&username);
 
-  if let Some(user) = users
-    .values()
-    .find(|user| user.username == username) {
-
-    Ok(warp::reply::json(
-      &User{
-        display_name: user.clone().display_name,
-        username:     user.clone().username,
-        biography:    user.clone().biography,
-        public_key:   user.clone().public_key,
-      }
-    ))
-  } else {
-    Err(warp::reject::not_found())
-  }
+  user
+    .map(|user| warp::reply::json(&user))
+    .map_err(|_| warp::reject::not_found())
 }
 
 /**
@@ -100,18 +80,9 @@ async fn handle_user_get(username: String, chain: Arc<Mutex<Blockchain>>) -> Res
  */
 async fn handle_user_search(search: String, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
   let chain = chain.lock().await;
-  let users = chain.get_users();
+  let users = chain.index.search_users(search);
 
-  let matching: Vec<User> = users
-    .values()
-    .filter(|user| user.username.to_lowercase().contains(&search.to_lowercase()))
-    .map   (|user| User {
-      display_name: user.clone().display_name,
-      username:     user.clone().username,
-      biography:    user.clone().biography,
-      public_key:   user.clone().public_key,
-    })
-    .collect();
-
-  Ok(warp::reply::json(&matching))
+  users
+    .map(|users| warp::reply::json(&users))
+    .map_err(|_| warp::reject::not_found())
 }

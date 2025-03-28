@@ -1,7 +1,32 @@
+use serde::Serialize;
+use rusqlite::OptionalExtension;
 use rusqlite::{params, Connection, Result};
 use crate::blockchain::block::Block;
 use crate::blockchain::block::BlockData;
-use crate::blockchain::chain::{Post, User};
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Post {
+  pub hash:      String,
+  pub author:    User,
+  pub body:      String,
+  pub reply:     Option<String>,
+  pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct User {
+  pub display_name: String,
+  pub username:     String,
+  pub biography:    String,
+  pub public_key:   String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PostDetail {
+  post:     Post,
+  replies:  Vec<Post>,
+  reply_to: Option<Post>,
+}
 
 #[derive(Debug)]
 pub struct Index {
@@ -10,7 +35,7 @@ pub struct Index {
 
 impl Index {
   pub fn new() -> Self {
-    let sqlite = Connection::open("index.db").unwrap();
+    let sqlite = Connection::open("chainindex.db").unwrap();
 
     let _ = sqlite.execute("
       CREATE TABLE IF NOT EXISTS posts (
@@ -22,6 +47,9 @@ impl Index {
       );
     ", []);
 
+    let _ = sqlite.execute("CREATE INDEX IF NOT EXISTS idx_posts_author ON posts (author)", []);
+    let _ = sqlite.execute("CREATE INDEX IF NOT EXISTS idx_posts_reply ON posts (reply)", []);
+
     let _ = sqlite.execute("
       CREATE TABLE IF NOT EXISTS users (
         public_key   TEXT PRIMARY KEY,
@@ -30,6 +58,9 @@ impl Index {
         biography    TEXT
       );
     ", []);
+
+    let _ = sqlite.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users (username)", []);
+
 
     Self { sqlite }
   }
@@ -123,33 +154,86 @@ impl Index {
     params.push(&limit);
     params.push(&offset);
 
-    Ok(
-      self.sqlite
-        .prepare(&query)?
-        .query_map(params.as_slice(), |row| {
-          Ok(Post {
-            author:    User {
-              display_name: row.get(4)?,
-              username:     row.get(5)?,
-              biography:    row.get(6)?,
-              public_key:   row.get(7)?,
-            },
-            hash:      row.get(0)?,
-            body:      row.get(1)?,
-            reply:     row.get::<_, Option<String>>(2)?,
-            timestamp: row.get::<_, i64>(3)? as u64,
-          })
-        })?
-        .collect::<Result<Vec<Post>, _>>()?
-    )
+    let posts = self.sqlite
+      .prepare(&query)?
+      .query_map(params.as_slice(), |row| {
+        Ok(Post {
+          author:    User {
+            display_name: row.get("display_name")?,
+            username:     row.get("username")?,
+            biography:    row.get("biography")?,
+            public_key:   row.get("public_key")?,
+          },
+          hash:      row.get("hash")?,
+          body:      row.get("body")?,
+          reply:     row.get::<_, Option<String>>("reply")?,
+          timestamp: row.get::<_, i64>("timestamp")? as u64,
+        })
+      })?
+      .collect::<Result<Vec<Post>, _>>()?;
+    Ok(posts)
   }
 
   /**
    * Retrieve a post by its hash.
    */
-  pub fn get_post(&self, hash: String) -> Result<Post> {
-    self.sqlite
-      .query_row("
+  pub fn get_post(&self, hash: &str) -> Result<Option<Post>> {
+    self.sqlite.query_row("
+      SELECT
+        posts.hash,
+        posts.body,
+        posts.reply,
+        posts.timestamp,
+        users.display_name,
+        users.username,
+        users.biography,
+        users.public_key
+      FROM posts
+      JOIN users ON users.public_key = posts.author
+      WHERE posts.hash = ?1
+    ", [hash], |row| {
+      Ok(Post {
+        author:    User {
+          display_name: row.get("display_name")?,
+          username:     row.get("username")?,
+          biography:    row.get("biography")?,
+          public_key:   row.get("public_key")?,
+        },
+        hash:      row.get("hash")?,
+        body:      row.get("body")?,
+        reply:     row.get::<_, Option<String>>("reply")?,
+        timestamp: row.get::<_, i64>("timestamp")? as u64,
+      })
+    }).optional()
+  }
+
+  /**
+   * Hydrate a post with full detail.
+   */
+  pub fn hydrate_post(&self, post: Post) -> Result<PostDetail> {
+    let replies = self.get_replies(&post.hash)?;
+    let reply_to = post.clone().reply
+        .map(|r| self.get_post(&r))
+        .transpose()?
+        .flatten();
+
+    Ok(PostDetail {
+      post,
+      reply_to,
+      replies,
+    })
+  }
+
+  pub fn hydrate_feed(&self, feed: Vec<Post>) -> Result<Vec<PostDetail>> {
+    feed
+      .into_iter()
+      .map(|post| self.hydrate_post(post))
+      .collect()
+  }
+
+  pub fn get_replies(&self, hash: &str) -> Result<Vec<Post>> {
+    let posts = self.sqlite
+      .prepare("
         SELECT
           posts.hash,
           posts.body,
@@ -161,20 +245,68 @@ impl Index {
           users.public_key
         FROM posts
         JOIN users ON users.public_key = posts.author
-        WHERE posts.hash = ?1
-      ", [hash], |row| {
+        WHERE posts.reply = ?1
+      ")?
+      .query_map([hash], |row| {
         Ok(Post {
           author:    User {
-            display_name: row.get(4)?,
-            username:     row.get(5)?,
-            biography:    row.get(6)?,
-            public_key:   row.get(7)?,
+            display_name: row.get("display_name")?,
+            username:     row.get("username")?,
+            biography:    row.get("biography")?,
+            public_key:   row.get("public_key")?,
           },
-          hash:      row.get(0)?,
-          body:      row.get(1)?,
-          reply:     row.get::<_, Option<String>>(2)?,
-          timestamp: row.get::<_, i64>(3)? as u64,
+          hash:      row.get("hash")?,
+          body:      row.get("body")?,
+          reply:     row.get::<_, Option<String>>("reply")?,
+          timestamp: row.get::<_, i64>("timestamp")? as u64,
         })
+      })?
+      .collect::<Result<Vec<Post>, _>>()?;
+    Ok(posts)
+  }
+
+  /**
+   * Retrieve a user by their username.
+   */
+  pub fn get_user(&self, username: &str) -> Result<Option<User>> {
+    self.sqlite.query_row("
+      SELECT
+        display_name,
+        username,
+        biography,
+        public_key
+      FROM users
+      WHERE users.username = ?
+    ", [username], |row| {
+      Ok(User {
+        display_name: row.get("display_name")?,
+        username:     row.get("username")?,
+        biography:    row.get("biography")?,
+        public_key:   row.get("public_key")?,
       })
+    }).optional()
+  }
+
+  pub fn search_users(&self, username: String) -> Result<Vec<User>> {
+    let users = self.sqlite
+      .prepare("
+        SELECT
+          display_name,
+          username,
+          biography,
+          public_key
+        FROM users
+        WHERE users.username LIKE ?
+      ")?
+      .query_map([format!("%{}%", username)], |row| {
+        Ok(User {
+          display_name: row.get("display_name")?,
+          username:     row.get("username")?,
+          biography:    row.get("biography")?,
+          public_key:   row.get("public_key")?,
+        })
+      })?
+      .collect::<Result<Vec<User>, _>>()?;
+    Ok(users)
   }
 }

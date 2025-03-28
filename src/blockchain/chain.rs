@@ -1,26 +1,7 @@
-use serde::Serialize;
 use std::collections::HashSet;
-use std::collections::HashMap;
 use crate::blockchain::store::Store;
 use crate::blockchain::index::Index;
 use crate::blockchain::block::{Block, BlockData, PendingBlock};
-
-#[derive(Debug, Clone, Serialize)]
-pub struct Post {
-  pub hash:      String,
-  pub author:    User,
-  pub body:      String,
-  pub reply:     Option<String>,
-  pub timestamp: u64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct User {
-  pub display_name: String,
-  pub username:     String,
-  pub biography:    String,
-  pub public_key:   String,
-}
 
 #[derive(Debug)]
 pub struct Blockchain {
@@ -179,32 +160,6 @@ impl Blockchain {
       println!("{}", json);
       println!("==================================================================================");
     }
-  }
-
-  /**
-   * Retrieve users from the user registration blocks. This returns a hash map
-   * with <public_key, username>.
-   */
-  pub fn get_users(&self) -> HashMap<String, User> {
-    let mut map: HashMap<String, User> = HashMap::new();
-
-    for block in self.chain_iter() {
-      if let BlockData::User {
-        username,
-        display_name,
-        biography,
-        ..
-      } = &block.data {
-        map.insert(block.public_key.clone(), User{
-          username:     username.to_string(),
-          display_name: display_name.to_string(),
-          biography:    biography.to_string(),
-          public_key:   block.clone().public_key,
-        });
-      }
-    }
-
-    map
   }
 
   pub fn chain_iter(&self) -> impl Iterator<Item = Block> + '_ {
