@@ -34,7 +34,8 @@ pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
       .allow_any_origin() // Allow any origin (for development)
       .allow_methods(vec!["GET", "POST"]) // Allow GET and POST requests
       .allow_headers(vec!["Content-Type"])
-    );
+    )
+    .recover(handle_rejection);
 
   match TcpListener::bind(addr).await {
     Ok(listener) => {
@@ -55,4 +56,18 @@ pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
 
 async fn handle_health() -> Result<impl warp::Reply, warp::Rejection> {
   Ok(warp::reply::json(&HealthReply{}))
+}
+
+async fn handle_rejection(err: warp::Rejection) -> Result<impl warp::Reply, std::convert::Infallible> {
+  if err.is_not_found() {
+    Ok(warp::reply::with_status(
+      "Not Found",
+      warp::http::StatusCode::NOT_FOUND,
+    ))
+  } else {
+    Ok(warp::reply::with_status(
+      "Internal Server Error",
+      warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+    ))
+  }
 }

@@ -268,7 +268,7 @@ impl Index {
   /**
    * Retrieve a user by their username.
    */
-  pub fn get_user(&self, username: &str) -> Result<Option<User>> {
+  pub fn get_user_by_username(&self, username: &str) -> Result<Option<User>> {
     self.sqlite.query_row("
       SELECT
         display_name,
@@ -278,6 +278,28 @@ impl Index {
       FROM users
       WHERE users.username = ?
     ", [username], |row| {
+      Ok(User {
+        display_name: row.get("display_name")?,
+        username:     row.get("username")?,
+        biography:    row.get("biography")?,
+        public_key:   row.get("public_key")?,
+      })
+    }).optional()
+  }
+
+  /**
+   * Retrieve a user by their username.
+   */
+  pub fn get_user_by_public_key(&self, public_key: &str) -> Result<Option<User>> {
+    self.sqlite.query_row("
+      SELECT
+        display_name,
+        username,
+        biography,
+        public_key
+      FROM users
+      WHERE users.public_key = ?
+    ", [public_key], |row| {
       Ok(User {
         display_name: row.get("display_name")?,
         username:     row.get("username")?,
@@ -308,5 +330,19 @@ impl Index {
       })?
       .collect::<Result<Vec<User>, _>>()?;
     Ok(users)
+  }
+
+  pub fn has_username(&self, username: &str) -> Result<bool> {
+    let res = self.sqlite
+      .query_row("SELECT 1 FROM users WHERE username = ?", [&username], |row| row.get::<_, i32>(0))
+      .optional()?;
+    Ok(res.is_some())
+  }
+
+  pub fn has_pubkey(&self, public_key: &str) -> Result<bool> {
+    let res = self.sqlite
+      .query_row("SELECT 1 FROM users WHERE public_key = ?", [&public_key], |row| row.get::<_, i32>(0))
+      .optional()?;
+    Ok(res.is_some())
   }
 }
