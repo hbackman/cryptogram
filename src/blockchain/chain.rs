@@ -1,4 +1,6 @@
 use std::collections::HashSet;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use crate::blockchain::store::Store;
 use crate::blockchain::index::Index;
 use crate::blockchain::block::{Block, BlockData, PendingBlock};
@@ -27,6 +29,10 @@ impl Blockchain {
     }
 
     chain
+  }
+
+  pub fn new_arc() -> Arc<Mutex<Self>> {
+    Arc::new(Mutex::new(Self::new()))
   }
 
   fn genesis() -> Block {

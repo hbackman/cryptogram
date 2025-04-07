@@ -1,12 +1,12 @@
 use tokio::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use warp::http;
-use warp::reply::{Json, WithStatus};
 use warp::Filter;
 use std::sync::Arc;
 use http::StatusCode;
 use crate::blockchain::chain::Blockchain;
 use crate::blockchain::block::{BlockData, PendingBlock};
+use crate::api::common::{error, reply, with_chain};
 
 #[derive(Clone, Deserialize)]
 pub struct UserRequest {
@@ -48,28 +48,6 @@ pub fn user_routes(chain: Arc<Mutex<Blockchain>>) -> impl Filter<Extract = impl 
     .or(user_search)
     .or(user_by_pkey)
     .or(user_by_name)
-}
-
-fn with_chain(
-    chain: Arc<Mutex<Blockchain>>,
-) -> impl Filter<Extract = (Arc<Mutex<Blockchain>>,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || chain.clone())
-}
-
-fn error(message: &str, status: StatusCode) -> Result<WithStatus<Json>, warp::Rejection> {
-  Ok(warp::reply::with_status(
-    warp::reply::json(&ErrorReply{
-      message: message.to_string(),
-    }),
-    status
-  ))
-}
-
-fn reply<T>(response: &T) -> Result<WithStatus<Json>, warp::Rejection> where T: Serialize {
-  Ok(warp::reply::with_status(
-    warp::reply::json(response),
-    StatusCode::OK
-  ))
 }
 
 /**
@@ -139,4 +117,38 @@ async fn handle_user_search(search: String, chain: Arc<Mutex<Blockchain>>) -> Re
   users
     .map(|users| warp::reply::json(&users))
     .map_err(|_| warp::reject::not_found())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::http::StatusCode;
+    use warp::Reply;
+    use warp::hyper::body::to_bytes;
+    use serde_json::Value;
+
+    #[tokio::test]
+    async fn test_handle_user_post_rejects_existing_username() {
+      let req = UserRequest {
+        display_name: "Hampus Backman".to_string(),
+        username:     "hbackman".to_string(),
+        biography:    "lorem ipsum dolor sit amet".to_string(),
+        public_key:   "dummy_key".to_string(),
+        signature:    "dummy_sig".to_string(),
+      };
+
+      // todo: this is using the real blockchain. it must use a test one
+      let chain = Blockchain::new_arc();
+      let reply = handle_user_post(req, chain)
+        .await
+        .unwrap()
+        .into_response();
+
+      assert_eq!(reply.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+      let body = to_bytes(reply.into_body()).await.unwrap();
+      let json: Value = serde_json::from_slice(&body).unwrap();
+
+      assert_eq!(json["message"], "Username is already taken.");
+    }
 }

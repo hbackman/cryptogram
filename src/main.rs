@@ -1,8 +1,7 @@
-mod api;
-mod p2p;
-mod blockchain;
-use tokio::sync::Mutex;
-use std::sync::Arc;
+pub mod api;
+pub mod p2p;
+pub mod blockchain;
+
 use blockchain::chain::Blockchain;
 use clap::{Command, Arg};
 
@@ -23,9 +22,7 @@ async fn main() {
     println!("Peers: {:?}", peers);
   }
 
-  let chain = Arc::new(Mutex::new(
-    Blockchain::new()
-  ));
+  let chain = Blockchain::new_arc();
 
   tokio::join!(
     p2p::p2p::start_p2p(chain.clone(), addr),

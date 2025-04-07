@@ -1,12 +1,13 @@
 use tokio::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_qs;
-use warp::http;
+use warp::http::StatusCode;
 use warp::Filter;
 use std::sync::Arc;
 use crate::blockchain::chain::Blockchain;
 use crate::blockchain::block::{BlockData, PendingBlock};
 use crate::blockchain::index::PostDetail;
+use crate::api::common::{error, reply, no_content, with_chain};
 
 #[derive(Clone, Deserialize)]
 pub struct PostRequest {
@@ -51,12 +52,6 @@ pub fn post_routes(chain: Arc<Mutex<Blockchain>>) -> impl Filter<Extract = impl 
     .or(post_detail)
 }
 
-fn with_chain(
-    chain: Arc<Mutex<Blockchain>>,
-) -> impl Filter<Extract = (Arc<Mutex<Blockchain>>,), Error = std::convert::Infallible> + Clone {
-    warp::any().map(move || chain.clone())
-}
-
 /**
  * Handle the feed endpoint.
  */
@@ -75,9 +70,9 @@ async fn handle_feed(query: String, chain: Arc<Mutex<Blockchain>>) -> Result<imp
     .hydrate_feed(feed)
     .map_err(|_| warp::reject::reject())?;
 
-  Ok(warp::reply::json(&FeedReply {
+  reply(&FeedReply {
     feed
-  }))
+  })
 }
 
 /**
@@ -88,6 +83,10 @@ async fn handle_post_create(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> 
 
   // todo: validate reply hash
 
+  if req.body.len() > 300 {
+    return error("Post body cannot exceed 300 characters.", StatusCode::UNPROCESSABLE_ENTITY);
+  }
+
   chain.push_mempool(PendingBlock::new(
     BlockData::Post {
       body:   req.clone().body,
@@ -97,10 +96,7 @@ async fn handle_post_create(req: PostRequest, chain: Arc<Mutex<Blockchain>>) -> 
     req.signature,
   )).unwrap_or_else(|e| println!("{}", e));
 
-  Ok(warp::reply::with_status(
-    warp::reply(),
-    http::StatusCode::NO_CONTENT
-  ))
+  no_content()
 }
 
 /**
@@ -110,11 +106,36 @@ async fn handle_post_detail(hash: String, chain: Arc<Mutex<Blockchain>>) -> Resu
   let chain = chain.lock().await;
 
   let post = chain.index.get_post(&hash)
-      .map_err(|_| warp::reject::not_found())?
-      .ok_or_else(|| warp::reject::not_found())?;
+    .map_err(|_| warp::reject::not_found())?
+    .ok_or_else(|| warp::reject::not_found())?;
 
   let hydrated = chain.index.hydrate_post(post)
-      .map_err(|_| warp::reject::not_found())?;
+    .map_err(|_| warp::reject::not_found())?;
 
-  Ok(warp::reply::json(&hydrated))
+  reply(&hydrated)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::http::StatusCode;
+    use warp::Reply;
+
+    #[tokio::test]
+    async fn test_handle_post_create_rejects_long_post() {
+      let req = PostRequest {
+        body:       "a".repeat(320),
+        reply:      None,
+        public_key: "dummy_key".to_string(),
+        signature:  "dummy_sig".to_string(),
+      };
+
+      let chain = Blockchain::new_arc();
+      let reply = handle_post_create(req, chain)
+        .await
+        .unwrap()
+        .into_response();
+
+      assert_eq!(reply.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    }
 }
