@@ -58,20 +58,20 @@ async fn handle_peer_connect(node: Arc<Node>, peer: &str) {
     .len();
 
   node.send(&peer, &MessageData::PeerDiscovery {}).await;
-  node.send(&peer, &MessageData::BlockRequest {index: chain_at}).await;
+  node.send(&peer, &MessageData::BlockRequest {index: chain_at + 1}).await;
 }
 
 /**
  * Handle listing connected peers.
  */
 async fn handle_peer_listing(node: Arc<Node>) {
-  let peers_guard = node.peers.lock().await;
+  let peers = node.get_peers().await;
 
-  if peers_guard.is_empty() {
+  if peers.is_empty() {
     println!("No connected peers.");
   } else {
     println!("Connected peers:");
-    for peer in peers_guard.iter() {
+    for peer in peers.iter() {
       println!("- {}", peer);
     }
   }
