@@ -49,12 +49,15 @@ impl Node {
       return;
     }
 
-    let mut peers = self.peers.lock().await;
+    if self.has_peer(peer).await {
+      return;
+    }
 
     match TcpStream::connect(peer).await {
       Ok(stream) => {
         let (tx, mut rx) = unbounded_channel::<Message>();
         let mut writer = BufWriter::new(stream);
+        let mut peers = self.peers.lock().await;
 
         peers.insert(peer.to_string(), tx);
 
@@ -83,6 +86,10 @@ impl Node {
         println!("Failed to connect to {}: {}", peer, e);
       }
     }
+  }
+
+  pub async fn has_peer(&self, peer: &str) -> bool {
+    self.peers.lock().await.contains_key(peer)
   }
 
   /**
