@@ -93,6 +93,10 @@ pub enum BlockData {
     username:     String,
     biography:    String,
   },
+  UserUpdate {
+    display_name: String,
+    biography:    String,
+  },
   Post {
     body:  String,
     reply: Option<String>,

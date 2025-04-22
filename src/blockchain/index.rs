@@ -76,6 +76,9 @@ impl Index {
       BlockData::User {..} => {
         self.index_user(block)?;
       },
+      BlockData::UserUpdate { .. } => {
+        self.index_user(block)?;
+      },
       _ => {}
     }
     Ok(())
@@ -116,6 +119,23 @@ impl Index {
         biography,
       ])?;
     }
+
+    if let BlockData::UserUpdate {
+      display_name,
+      biography,
+      ..
+    } = block.clone().data {
+      self.sqlite.execute("
+        UPDATE users
+        SET display_name = ?1, biography = ?2
+        WHERE public_key = ?3
+      ", params![
+        display_name,
+        biography,
+        block.clone().public_key,
+      ])?;
+    }
+
     Ok(())
   }
 

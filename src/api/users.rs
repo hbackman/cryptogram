@@ -9,9 +9,17 @@ use crate::blockchain::block::{BlockData, PendingBlock};
 use crate::api::common::{error, reply, with_chain};
 
 #[derive(Clone, Deserialize)]
-pub struct UserRequest {
+pub struct UserCreateRequest {
   display_name: String,
   username:     String,
+  biography:    String,
+  public_key:   String,
+  signature:    String,
+}
+
+#[derive(Clone, Deserialize)]
+pub struct UserUpdateRequest {
+  display_name: String,
   biography:    String,
   public_key:   String,
   signature:    String,
@@ -27,7 +35,13 @@ pub fn user_routes(chain: Arc<Mutex<Blockchain>>) -> impl Filter<Extract = impl 
     .and(warp::post())
     .and(warp::body::json())
     .and(with_chain(chain.clone()))
-    .and_then(handle_user_post);
+    .and_then(handle_user_create);
+
+  let update_user = warp::path!("users" / String)
+    .and(warp::put())
+    .and(warp::body::json())
+    .and(with_chain(chain.clone()))
+    .and_then(handle_user_update);
 
   let user_by_pkey = warp::path!("users" / String)
     .and(warp::get())
@@ -45,6 +59,7 @@ pub fn user_routes(chain: Arc<Mutex<Blockchain>>) -> impl Filter<Extract = impl 
     .and_then(handle_user_search);
 
   create_user
+    .or(update_user)
     .or(user_search)
     .or(user_by_pkey)
     .or(user_by_name)
@@ -53,7 +68,7 @@ pub fn user_routes(chain: Arc<Mutex<Blockchain>>) -> impl Filter<Extract = impl 
 /**
  * Handle user registration.
  */
-async fn handle_user_post(req: UserRequest, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
+async fn handle_user_create(req: UserCreateRequest, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
   let mut chain = chain.lock().await;
 
   if chain.index.has_username(&req.username).unwrap() {
@@ -71,6 +86,30 @@ async fn handle_user_post(req: UserRequest, chain: Arc<Mutex<Blockchain>>) -> Re
       biography:    req.biography,
     },
     req.public_key,
+    req.signature,
+  )).unwrap_or_else(|e| println!("{}", e));
+
+  Ok(
+    warp::reply::with_status(
+      warp::reply::json(&{}),
+      StatusCode::NO_CONTENT
+    )
+  )
+}
+
+async fn handle_user_update(public_key: String, req: UserUpdateRequest, chain: Arc<Mutex<Blockchain>>) -> Result<impl warp::Reply, warp::Rejection> {
+  let mut chain = chain.lock().await;
+
+  if public_key != req.public_key {
+    return error("Public key does not match.", StatusCode::UNAUTHORIZED);
+  }
+
+  chain.push_mempool(PendingBlock::new(
+    BlockData::UserUpdate {
+      display_name: req.display_name,
+      biography:    req.biography,
+    },
+    public_key,
     req.signature,
   )).unwrap_or_else(|e| println!("{}", e));
 
@@ -129,7 +168,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_user_post_rejects_existing_username() {
-      let req = UserRequest {
+      let req = UserCreateRequest {
         display_name: "Hampus Backman".to_string(),
         username:     "hbackman".to_string(),
         biography:    "lorem ipsum dolor sit amet".to_string(),
@@ -139,7 +178,7 @@ mod tests {
 
       // todo: this is using the real blockchain. it must use a test one
       let chain = Blockchain::new_arc();
-      let reply = handle_user_post(req, chain)
+      let reply = handle_user_create(req, chain)
         .await
         .unwrap()
         .into_response();

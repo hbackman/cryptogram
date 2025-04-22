@@ -32,7 +32,7 @@ pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
     .or(link_routes)
     .with(warp::cors()
       .allow_any_origin() // Allow any origin (for development)
-      .allow_methods(vec!["GET", "POST"]) // Allow GET and POST requests
+      .allow_methods(vec!["GET", "POST", "PUT", "DELETE"])
       .allow_headers(vec!["Content-Type"])
     )
     .recover(handle_rejection);
