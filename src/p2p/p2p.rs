@@ -14,8 +14,14 @@ use crate::p2p::message::{Message, MessageData};
 /**
  * Start the p2p node.
  */
-pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>, addr: String) {
+pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>, addr: String, peers: Vec<String>) {
   let node = Arc::new(Node::new(chain, addr).await);
+
+  for peer in peers.clone() {
+    node.add_peer(&peer).await;
+  }
+
+  node.sync().await;
 
   tokio::spawn(handle_mempool_blocks(node.clone()));
   tokio::spawn(handle_incoming_messages(node.clone()));

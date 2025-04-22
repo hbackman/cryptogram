@@ -47,7 +47,7 @@ pub async fn handle_user_input(node: Arc<Node>) {
 async fn handle_peer_connect(node: Arc<Node>, peer: &str) {
   let peer = peer.to_string();
 
-  println!("Connected to {}", peer);
+  println!("Connecting to {}", peer);
 
   node.add_peer(&peer).await;
 
@@ -92,14 +92,5 @@ async fn handle_chain_listing(node: Arc<Node>) {
  * the entire blockchain from.
  */
 async fn handle_chain_syncing(node: Arc<Node>) {
-  let peer = node.get_random_peer().await.unwrap();
-
-  node.send(&peer, &MessageData::BlockRequest {
-    index: node.chain
-      .lock()
-      .await
-      .len(),
-  }).await;
-
-  println!("requesting blockchain sync");
+  node.sync().await;
 }

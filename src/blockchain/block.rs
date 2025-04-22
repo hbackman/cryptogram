@@ -201,6 +201,11 @@ impl Block {
    * The block difficulty.
    */
   pub fn difficulty(&self) -> usize {
-    3
+    // User registration should be a little more difficult than other blocks to
+    // prevent rapid registration attempts.
+    match self.data {
+      BlockData::User {..} => 5,
+      _                    => 3,
+    }
   }
 }

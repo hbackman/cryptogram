@@ -140,4 +140,23 @@ impl Node {
       self.send(&peer, payload).await;
     }
   }
+
+  /**
+   * Sync the node with a random peer.
+   */
+  pub async fn sync(&self) {
+    match self.get_random_peer().await {
+      Some(peer) => {
+        self.send(&peer, &MessageData::BlockRequest {
+          index: self.chain
+            .lock()
+            .await
+            .len(),
+        }).await;
+
+        println!("Requesting blockchain sync");
+      }
+      None => {}
+    }
+  }
 }

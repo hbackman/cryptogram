@@ -2,40 +2,55 @@ pub mod api;
 pub mod p2p;
 pub mod blockchain;
 
-use blockchain::chain::Blockchain;
+use toml;
+use std::fs;
+use std::error::Error;
+use serde::Deserialize;
 use clap::{Arg, ArgMatches, Command};
+use blockchain::chain::Blockchain;
+
+#[derive(Debug, Deserialize)]
+struct Config {
+  peers: Vec<String>,
+}
 
 #[tokio::main]
 async fn main() {
   let matches = cli().get_matches();
 
-  // Handle peer argument.
-  let peers: Vec<&String> = matches.get_many::<String>("peer")
-    .unwrap_or_default()
-    .collect();
+  let config = get_config().unwrap();
 
-  if ! peers.is_empty() {
-    println!("Peers: {:?}", peers);
-  }
+  println!("{:?}", config);
 
   let chain = Blockchain::new_arc();
 
   tokio::join!(
-    p2p::p2p::start_p2p(chain.clone(), get_p2p_addr(matches.clone())),
+    p2p::p2p::start_p2p(chain.clone(), get_p2p_addr(matches.clone()), config.peers),
     api::api::start_api(chain.clone(), get_api_addr(matches.clone())),
   );
 }
 
 fn get_p2p_addr(cli: ArgMatches) -> String {
-  let port = cli.get_one::<String>("p2p-port").unwrap();
-
-  format!("127.0.0.1:{}", port)
+  format!("127.0.0.1:{}", cli.get_one::<String>("p2p-port").unwrap())
 }
 
 fn get_api_addr(cli: ArgMatches) -> String {
-  let port = cli.get_one::<String>("api-port").unwrap();
+  format!("127.0.0.1:{}", cli.get_one::<String>("api-port").unwrap())
+}
 
-  format!("127.0.0.1:{}", port)
+fn get_config() -> Result<Config, Box<dyn Error>> {
+  match fs::read_to_string("config.toml") {
+    Ok(content) => {
+      let config: Config = toml::from_str(&content)?;
+      Ok(config)
+    },
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+      Ok(Config {
+        peers: vec![],
+      })
+    },
+    Err(e) => Err(Box::new(e)),
+  }
 }
 
 fn cli() -> Command {
@@ -52,9 +67,5 @@ fn cli() -> Command {
         .help("The API port")
         .default_value("3030")
         .required(false),
-      Arg::new("peer")
-        .long("peer")
-        .help("A peer to connect to")
-        .num_args(1..),
     ])
 }
