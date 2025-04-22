@@ -15,8 +15,8 @@ struct HealthReply {}
 /**
  * Start the API.
  */
-pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
-  let addr: SocketAddr = ([127, 0, 0, 1], 3030).into();
+pub async fn start_api(chain: Arc<Mutex<Blockchain>>, addr: String) {
+  let addr: SocketAddr = addr.parse().unwrap();
 
   let health = warp::path("health")
     .and(warp::get())
@@ -41,7 +41,7 @@ pub async fn start_api(chain: Arc<Mutex<Blockchain>>) {
     Ok(listener) => {
       drop(listener);
 
-      println!("Running api on 127.0.0.1:3030");
+      println!("Running api on {}", addr);
 
       warp::serve(routes).run(addr).await;
     }
