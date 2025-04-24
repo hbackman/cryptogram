@@ -8,6 +8,8 @@ use std::error::Error;
 use serde::Deserialize;
 use clap::{Arg, ArgMatches, Command};
 use blockchain::chain::Blockchain;
+use p2p::p2p::start_p2p;
+use api::api::start_api;
 
 #[derive(Debug, Deserialize)]
 struct Config {
@@ -17,16 +19,12 @@ struct Config {
 #[tokio::main]
 async fn main() {
   let matches = cli().get_matches();
-
   let config = get_config().unwrap();
-
-  println!("{:?}", config);
-
   let chain = Blockchain::new_arc();
 
   tokio::join!(
-    p2p::p2p::start_p2p(chain.clone(), get_p2p_addr(matches.clone()), config.peers),
-    api::api::start_api(chain.clone(), get_api_addr(matches.clone())),
+    start_p2p(chain.clone(), get_p2p_addr(matches.clone()), config.peers),
+    start_api(chain.clone(), get_api_addr(matches.clone())),
   );
 }
 
@@ -61,7 +59,8 @@ fn cli() -> Command {
       Arg::new("p2p-port")
         .long("p2p-port")
         .help("The node port")
-        .required(true),
+        .default_value("5000")
+        .required(false),
       Arg::new("api-port")
         .long("api-port")
         .help("The API port")

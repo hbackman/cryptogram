@@ -140,30 +140,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "blockchain"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "byteorder",
- "clap",
- "ed25519-dalek",
- "heed",
- "hex",
- "rand",
- "reqwest",
- "rusqlite",
- "scraper",
- "serde",
- "serde_json",
- "serde_qs",
- "sha2",
- "thiserror 2.0.12",
- "tokio",
- "toml",
- "warp",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -296,6 +272,30 @@ checksum = "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3"
 dependencies = [
  "generic-array",
  "typenum",
+]
+
+[[package]]
+name = "cryptogram"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "byteorder",
+ "clap",
+ "ed25519-dalek",
+ "heed",
+ "hex",
+ "rand",
+ "reqwest",
+ "rusqlite",
+ "scraper",
+ "serde",
+ "serde_json",
+ "serde_qs",
+ "sha2",
+ "thiserror 2.0.12",
+ "tokio",
+ "toml",
+ "warp",
 ]
 
 [[package]]

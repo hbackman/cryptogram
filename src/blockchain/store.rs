@@ -3,6 +3,8 @@ use heed::types::SerdeJson;
 use heed::types::U64;
 use heed::Env;
 use byteorder::NativeEndian;
+use std::fs;
+use std::path::Path;
 use crate::blockchain::block::Block;
 
 #[derive(Debug, Clone)]
@@ -13,10 +15,16 @@ pub struct Store {
 
 impl Store {
   pub fn new() -> heed::Result<Self> {
+    let path = Path::new("blockchain");
+
+    if !path.exists() {
+      fs::create_dir_all(path)?;
+    }
+
     let env = unsafe {
       EnvOpenOptions::new()
         .max_dbs(1)
-        .open("blockchain")?
+        .open(path)?
     };
 
     let db = {

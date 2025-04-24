@@ -23,10 +23,12 @@ pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>, addr: String, peers: Vec<S
 
   node.sync().await;
 
-  tokio::spawn(handle_mempool_blocks(node.clone()));
-  tokio::spawn(handle_incoming_messages(node.clone()));
-  tokio::spawn(gossip::handle_peer_gossip(node.clone()));
-  tokio::spawn(input::handle_user_input(node.clone())).await.unwrap();
+  let _ = tokio::join!(
+    tokio::spawn(handle_mempool_blocks(node.clone())),
+    tokio::spawn(handle_incoming_messages(node.clone())),
+    tokio::spawn(gossip::handle_peer_gossip(node.clone())),
+    tokio::spawn(input::handle_user_input(node.clone())),
+  );
 }
 
 /**
