@@ -16,7 +16,6 @@ pub struct Store {
 impl Store {
   pub fn new() -> heed::Result<Self> {
     let path = Path::new("blockchain");
-
     if !path.exists() {
       fs::create_dir_all(path)?;
     }

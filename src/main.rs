@@ -29,11 +29,11 @@ async fn main() {
 }
 
 fn get_p2p_addr(cli: ArgMatches) -> String {
-  format!("127.0.0.1:{}", cli.get_one::<String>("p2p-port").unwrap())
+  format!("0.0.0.0:{}", cli.get_one::<String>("p2p-port").unwrap())
 }
 
 fn get_api_addr(cli: ArgMatches) -> String {
-  format!("127.0.0.1:{}", cli.get_one::<String>("api-port").unwrap())
+  format!("0.0.0.0:{}", cli.get_one::<String>("api-port").unwrap())
 }
 
 fn get_config() -> Result<Config, Box<dyn Error>> {

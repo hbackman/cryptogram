@@ -22,6 +22,11 @@ Contributions are welcome! Feel free to fork, submit PRs, or open issues.
 - Users
   - Images?
 
+Mac
 ```
 brew install leveldb
 ```
+
+Debian
+```
+sudo apt-get install libsqlite3-dev libleveldb-dev
