@@ -47,6 +47,8 @@ async fn handle_incoming_messages(node: Arc<Node>) {
 async fn handle_client(node: Arc<Node>, socket: TcpStream) {
   let sender = socket.peer_addr().unwrap().to_string();
 
+  println!("? {:?}", sender);
+
   let mut reader = BufReader::new(socket);
   let mut buffer = String::new();
 
@@ -54,6 +56,7 @@ async fn handle_client(node: Arc<Node>, socket: TcpStream) {
     if let Ok(message) = serde_json::from_str::<Message>(&buffer.trim()) {
       // let sender = message.sender.clone();
 
+      println!("{:?}", message);
 
       node.clone().add_peer(&sender).await;
 
