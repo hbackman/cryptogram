@@ -1,11 +1,11 @@
 use tokio::net::{TcpListener, TcpStream};
-use tokio::io::{AsyncWriteExt, BufWriter};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufWriter, BufReader};
 use tokio::sync::Mutex;
 use serde_json;
 use std::sync::Arc;
 use std::collections::HashMap;
 use rand::seq::IteratorRandom;
-use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
+use tokio::sync::mpsc::{UnboundedSender, UnboundedReceiver, unbounded_channel};
 use crate::p2p::message::Message;
 use crate::p2p::message::MessageData;
 use crate::blockchain::chain::Blockchain;
@@ -55,37 +55,68 @@ impl Node {
 
     match TcpStream::connect(peer).await {
       Ok(stream) => {
-        let (tx, mut rx) = unbounded_channel::<Message>();
-        let mut writer = BufWriter::new(stream);
-        let mut peers = self.peers.lock().await;
-
-        peers.insert(peer.to_string(), tx);
-
-        let peer_clone = peer.to_string();
-        let node_clone = self.clone();
-
-        tokio::spawn(async move {
-          while let Some(msg) = rx.recv().await {
-            if let Ok(data) = serde_json::to_string(&msg) {
-
-              writer.write_all(data.as_bytes()).await.unwrap();
-              writer.write_all(b"\n").await.unwrap();
-
-              if writer.flush().await.is_err() {
-                println!("Disconnected from peer {}", peer_clone);
-
-                node_clone.rem_peer(&peer_clone).await;
-
-                break;
-              }
-            }
-          }
-        });
+        self.setup_peer(stream).await;
       },
       Err(e) => {
         println!("Failed to connect to {}: {}", peer, e);
       }
     }
+  }
+
+  pub async fn setup_peer(&self, stream: TcpStream) {
+    let peer_addr = stream
+      .peer_addr()
+      .unwrap()
+      .to_string();
+
+    let (reader, mut writer) = stream.into_split();
+
+    let mut reader = BufReader::new(reader);
+    let mut buffer = String::new();
+
+    let (tx, mut rx): (
+      UnboundedSender<Message>,
+      UnboundedReceiver<Message>,
+    ) = unbounded_channel();
+
+    self.peers
+      .lock()
+      .await
+      .insert(peer_addr.clone(), tx.clone());
+
+    let node_clone = self.clone();
+
+    tokio::spawn(async move {
+      while let Some(msg) = rx.recv().await {
+        if let Ok(data) = serde_json::to_string(&msg) {
+
+          println!("sending: {:?}", msg);
+
+          writer.write_all(data.as_bytes()).await.unwrap();
+          writer.write_all(b"\n").await.unwrap();
+
+          if writer.flush().await.is_err() {
+            println!("Disconnected from peer {}", peer_addr);
+
+            node_clone.rem_peer(&peer_addr).await;
+
+            break;
+          }
+        }
+      }
+    });
+
+    tokio::spawn(async move {
+      while reader.read_line(&mut buffer).await.unwrap() > 0 {
+        if let Ok(message) = serde_json::from_str::<Message>(&buffer.trim()) {
+          let sender = message.sender.clone();
+
+          println!("received {:?}", message);
+
+        }
+        buffer.clear();
+      }
+    });
   }
 
   pub async fn has_peer(&self, peer: &str) -> bool {

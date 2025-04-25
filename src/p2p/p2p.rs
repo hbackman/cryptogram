@@ -1,5 +1,4 @@
 use tokio::net::TcpStream;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use std::sync::Arc;
@@ -44,26 +43,8 @@ async fn handle_incoming_messages(node: Arc<Node>) {
 /**
  * Read messages from a connected peer.
  */
-async fn handle_client(node: Arc<Node>, socket: TcpStream) {
-  let sender = socket.peer_addr().unwrap().to_string();
-
-  println!("? {:?}", sender);
-
-  let mut reader = BufReader::new(socket);
-  let mut buffer = String::new();
-
-  while reader.read_line(&mut buffer).await.unwrap() > 0 {
-    if let Ok(message) = serde_json::from_str::<Message>(&buffer.trim()) {
-      // let sender = message.sender.clone();
-
-      println!("{:?}", message);
-
-      node.clone().add_peer(&sender).await;
-
-      handle_message(node.clone(), message.clone()).await;
-    }
-    buffer.clear();
-  }
+async fn handle_client(node: Arc<Node>, stream: TcpStream) {
+  node.setup_peer(stream).await;
 }
 
 /**
@@ -80,9 +61,9 @@ async fn handle_message(node: Arc<Node>, message: Message) {
       }).await;
     },
     MessageData::PeerGossip { peers } => {
-      for peer in peers {
-        node.add_peer(&peer).await;
-      }
+      // for peer in peers {
+      //   node.add_peer(&peer).await;
+      // }
     },
     MessageData::BlockchainTx { block } => {
       println!("BlockchainTx: {:?}", block);
