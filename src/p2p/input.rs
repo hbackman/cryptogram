@@ -49,7 +49,7 @@ async fn handle_peer_connect(node: Arc<Node>, peer: &str) {
 
   println!("Connecting to {}", peer);
 
-  node.add_peer(&peer).await;
+  node.connect_to_peer(&peer).await;
 
   // Ask peer for its peers and blockchain.
   let chain_at = node.chain

@@ -4,9 +4,10 @@ use crate::blockchain::block::Block;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum MessageData {
-  // Misc
-  Chat {
-    message: String,
+  // Handshake
+  Handshake {
+    version: String,
+    peer_id: String,
   },
   // Peers
   PeerDiscovery {},
@@ -18,6 +19,10 @@ pub enum MessageData {
   },
   BlockRequest { index: usize },
   BlockResponse { block: Block },
+  // Misc
+  Chat {
+    message: String,
+  },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -25,4 +30,11 @@ pub struct Message
 {
     pub sender: String,
     pub payload: MessageData,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Handshake
+{
+    pub version: String,
+    pub peer_id: String,
 }

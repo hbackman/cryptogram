@@ -17,7 +17,7 @@ pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>, addr: String, peers: Vec<S
   let node = Arc::new(Node::new(chain, addr).await);
 
   for peer in peers.clone() {
-    node.add_peer(&peer).await;
+    let _ = node.connect_to_peer(&peer).await;
   }
 
   node.sync().await;
@@ -44,7 +44,9 @@ async fn handle_incoming_messages(node: Arc<Node>) {
  * Read messages from a connected peer.
  */
 async fn handle_client(node: Arc<Node>, stream: TcpStream) {
-  node.setup_peer(stream).await;
+  println!("incoming");
+
+  let _ = node.handle_incoming(stream).await;
 }
 
 /**
@@ -107,6 +109,9 @@ async fn handle_message(node: Arc<Node>, message: Message) {
       node.send(&peer, &MessageData::BlockRequest {
         index: (block.index as usize) + 1,
       }).await;
+    },
+    _ => {
+      eprintln!("Unknown message.");
     },
   }
 }

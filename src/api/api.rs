@@ -41,7 +41,7 @@ pub async fn start_api(chain: Arc<Mutex<Blockchain>>, addr: String) {
     Ok(listener) => {
       drop(listener);
 
-      println!("Running api on {}", addr);
+      println!("Running API on {}", addr);
 
       warp::serve(routes).run(addr).await;
     }

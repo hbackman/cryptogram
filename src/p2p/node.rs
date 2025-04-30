@@ -1,19 +1,25 @@
 use tokio::net::{TcpListener, TcpStream};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufWriter, BufReader};
+use tokio::io::AsyncWriteExt;
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::Mutex;
 use serde_json;
+use std::error::Error;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use std::sync::Arc;
 use std::collections::HashMap;
 use rand::seq::IteratorRandom;
 use tokio::sync::mpsc::{UnboundedSender, UnboundedReceiver, unbounded_channel};
+use uuid::Uuid;
 use crate::p2p::message::Message;
 use crate::p2p::message::MessageData;
+use crate::p2p::message::Handshake;
 use crate::blockchain::chain::Blockchain;
 
 type Peer = UnboundedSender<Message>;
 
 #[derive(Debug, Clone)]
 pub struct Node {
+  pub node_id:  String,
   pub peers:    Arc<Mutex<HashMap<String, Peer>>>,
   pub chain:    Arc<Mutex<Blockchain>>,
   pub listener: Arc<TcpListener>,
@@ -21,13 +27,16 @@ pub struct Node {
 
 impl Node {
   pub async fn new(chain: Arc<Mutex<Blockchain>>, addr: String) -> Self {
-    println!("Running p2p on {}", addr);
+    let node_id = Uuid::new_v4().to_string();
+
+    println!("Running P2P on {}, Node ID: {}", addr, node_id);
 
     let listener = TcpListener::bind(&addr)
       .await
       .unwrap();
 
     Node {
+      node_id,
       peers:    Arc::new(Mutex::new(HashMap::new())),
       listener: Arc::new(listener),
       chain,
@@ -42,38 +51,65 @@ impl Node {
   }
 
   /**
-   * Register a node peer.
+   * Connect to a peer using their address.
    */
-  pub async fn add_peer(&self, peer: &str) {
-    if peer == self.get_local_addr() {
-      return;
-    }
+  pub async fn connect_to_peer(&self, peer: &str) -> Result<(), Box<dyn Error>> {
+    let stream = TcpStream::connect(peer).await?;
 
-    if self.has_peer(peer).await {
-      return;
-    }
+    let (
+      mut reader,
+      mut writer,
+    ) = stream.into_split();
 
-    match TcpStream::connect(peer).await {
-      Ok(stream) => {
-        self.setup_peer(stream).await;
-      },
-      Err(e) => {
-        println!("Failed to connect to {}: {}", peer, e);
-      }
-    }
+    println!("outgoing: sending handshake");
+    self.send_handshake(&mut writer).await?;
+
+    println!("outgoing: receiving handshake");
+    let handshake = self.recv_handshake(&mut reader).await?;
+
+    println!("handshake complete");
+
+    // Handshake is complete. Set up the transmit.
+
+    self.setup_peer(
+      handshake.peer_id,
+      reader,
+      writer,
+    ).await;
+
+    Ok(())
   }
 
-  pub async fn setup_peer(&self, stream: TcpStream) {
-    let peer_addr = stream
-      .peer_addr()
-      .unwrap()
-      .to_string();
+  /**
+   * Handle an incoming peer connection.
+   */
+  pub async fn handle_incoming(&self, stream: TcpStream) -> Result<(), Box<dyn Error>> {
+    let (
+      mut reader,
+      mut writer,
+    ) = stream.into_split();
 
-    let (reader, mut writer) = stream.into_split();
+    println!("incoming: reading handshake");
+    let handshake = self.recv_handshake(&mut reader).await?;
 
-    let mut reader = BufReader::new(reader);
-    let mut buffer = String::new();
+    println!("incoming: sending handshake");
+    self.send_handshake(&mut writer).await?;
 
+    println!("done handshaking");
+
+    self.setup_peer(
+      handshake.peer_id,
+      reader,
+      writer,
+    ).await;
+
+    Ok(())
+  }
+
+  /**
+   * Configure the communication channel for a peer.
+   */
+  async fn setup_peer(&self, peer_id: String, reader: OwnedReadHalf, mut writer: OwnedWriteHalf) {
     let (tx, mut rx): (
       UnboundedSender<Message>,
       UnboundedReceiver<Message>,
@@ -82,23 +118,19 @@ impl Node {
     self.peers
       .lock()
       .await
-      .insert(peer_addr.clone(), tx.clone());
-
-    let node_clone = self.clone();
+      .insert(peer_id, tx.clone());
 
     tokio::spawn(async move {
       while let Some(msg) = rx.recv().await {
         if let Ok(data) = serde_json::to_string(&msg) {
 
-          println!("sending: {:?}", msg);
-
           writer.write_all(data.as_bytes()).await.unwrap();
           writer.write_all(b"\n").await.unwrap();
 
           if writer.flush().await.is_err() {
-            println!("Disconnected from peer {}", peer_addr);
+            println!("Disconnected from peer");
 
-            node_clone.rem_peer(&peer_addr).await;
+            // self.rem_peer(&peer_addr).await;
 
             break;
           }
@@ -107,18 +139,21 @@ impl Node {
     });
 
     tokio::spawn(async move {
+      let mut reader = BufReader::new(reader);
+      let mut buffer = String::new();
+
       while reader.read_line(&mut buffer).await.unwrap() > 0 {
         if let Ok(message) = serde_json::from_str::<Message>(&buffer.trim()) {
-          let sender = message.sender.clone();
-
           println!("received {:?}", message);
-
         }
         buffer.clear();
       }
     });
   }
 
+  /**
+   * Check if a peer exists.
+   */
   pub async fn has_peer(&self, peer: &str) -> bool {
     self.peers.lock().await.contains_key(peer)
   }
@@ -127,9 +162,7 @@ impl Node {
    * Remove a node peer.
    */
   pub async fn rem_peer(&self, peer: &str) {
-    let mut peers_guard = self.peers.lock().await;
-
-    peers_guard.remove(peer);
+    self.peers.lock().await.remove(peer);
   }
 
   /**
@@ -146,7 +179,9 @@ impl Node {
    * Retrive a random peer.
    */
   pub async fn get_random_peer(&self) -> Option<String> {
-    let peers = self.peers.lock().await;
+    let peers = self.peers
+      .lock()
+      .await;
 
     // Pick a random peer from the HashSet
     peers.keys().choose(&mut rand::thread_rng()).cloned()
@@ -197,4 +232,38 @@ impl Node {
       None => {}
     }
   }
+
+  async fn send_handshake(&self, writer: &mut OwnedWriteHalf) -> Result<(), Box<dyn Error>> {
+    let sending = Handshake {
+      version: "1".to_string(),
+      peer_id: self.node_id.clone(),
+    };
+
+    // Send handshake
+    writer.write_all(serde_json::to_string(&sending)?.as_bytes()).await?;
+    writer.write_all(b"\n").await?;
+
+    Ok(())
+  }
+
+  async fn recv_handshake(&self, reader: &mut OwnedReadHalf) -> Result<Handshake, Box<dyn Error>> {
+    let mut reader = BufReader::new(reader);
+    let mut buffer = String::new();
+
+    reader.read_line(&mut buffer).await.unwrap();
+    let handshake = serde_json::from_str::<Handshake>(&buffer.trim()).unwrap();
+    buffer.clear();
+
+    // Validate handshake.
+    if handshake.version != "1" {
+      return Err("Invalid handshake version".into());
+    }
+
+    if handshake.peer_id == self.node_id {
+      return Err("Cannot connect to self".into());
+    }
+
+    Ok(handshake)
+  }
+
 }
