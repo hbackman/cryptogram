@@ -108,7 +108,10 @@ impl Node {
     self.peers
       .lock()
       .await
-      .insert(peer_id, tx.clone());
+      .insert(peer_id.clone(), tx.clone());
+
+    let peer_clone = peer_id.clone();
+    let node_clone = self.clone();
 
     tokio::spawn(async move {
       while let Some(msg) = rx.recv().await {
@@ -120,7 +123,7 @@ impl Node {
           if writer.flush().await.is_err() {
             println!("Disconnected from peer");
 
-            self.rem_peer(&peer_id).await;
+            node_clone.rem_peer(&peer_clone).await;
 
             break;
           }
