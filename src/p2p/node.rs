@@ -53,7 +53,7 @@ impl Node {
   /**
    * Connect to a peer using their address.
    */
-  pub async fn connect_to_peer(&self, peer: &str) -> Result<(), Box<dyn Error>> {
+  pub async fn connect_to_peer(&self, peer: &str) -> Result<String, Box<dyn Error>> {
     let stream = TcpStream::connect(peer).await?;
 
     let (
@@ -61,23 +61,17 @@ impl Node {
       mut writer,
     ) = stream.into_split();
 
-    println!("outgoing: sending handshake");
     self.send_handshake(&mut writer).await?;
 
-    println!("outgoing: receiving handshake");
     let handshake = self.recv_handshake(&mut reader).await?;
 
-    println!("handshake complete");
-
-    // Handshake is complete. Set up the transmit.
-
     self.setup_peer(
-      handshake.peer_id,
+      handshake.peer_id.clone(),
       reader,
       writer,
     ).await;
 
-    Ok(())
+    Ok(handshake.peer_id.clone())
   }
 
   /**
@@ -89,13 +83,9 @@ impl Node {
       mut writer,
     ) = stream.into_split();
 
-    println!("incoming: reading handshake");
     let handshake = self.recv_handshake(&mut reader).await?;
 
-    println!("incoming: sending handshake");
     self.send_handshake(&mut writer).await?;
-
-    println!("done handshaking");
 
     self.setup_peer(
       handshake.peer_id,
@@ -130,7 +120,7 @@ impl Node {
           if writer.flush().await.is_err() {
             println!("Disconnected from peer");
 
-            // self.rem_peer(&peer_addr).await;
+            self.rem_peer(&peer_id).await;
 
             break;
           }
@@ -138,17 +128,82 @@ impl Node {
       }
     });
 
+    let self_clone = self.clone();
+
     tokio::spawn(async move {
       let mut reader = BufReader::new(reader);
       let mut buffer = String::new();
 
       while reader.read_line(&mut buffer).await.unwrap() > 0 {
         if let Ok(message) = serde_json::from_str::<Message>(&buffer.trim()) {
-          println!("received {:?}", message);
+          self_clone.handle_message(message).await;
         }
         buffer.clear();
       }
     });
+  }
+
+  async fn handle_message(&self, message: Message) {
+    match message.payload {
+      MessageData::Chat { message: msg } => {
+        println!("[{}] {}", message.sender, msg);
+      },
+      MessageData::PeerDiscovery {} => {
+        self.send(&message.sender, &MessageData::PeerGossip {
+          peers: self.get_peers().await,
+        }).await;
+      },
+      // MessageData::PeerGossip { peers } => {
+      //   for peer in peers {
+      //     node.add_peer(&peer).await;
+      //   }
+      // },
+      MessageData::BlockchainTx { block } => {
+        println!("BlockchainTx: {:?}", block);
+
+        self.chain
+          .lock()
+          .await
+          .add_block(block)
+          .unwrap_or_else(|e| println!("{}", e));
+      },
+      // When another node asks for a block, reply with the block at the index
+      // which the node asked for.
+      MessageData::BlockRequest { index } => {
+        println!("BlockRequest: {:?}", index);
+
+        let block = self.chain
+          .lock()
+          .await
+          .at(index);
+
+        if let Some(block) = block {
+          self.send(&message.sender, &MessageData::BlockResponse { block }).await;
+        }
+      },
+      // When receiving a block, add it to the chain and ask a random peer for
+      // the next block. This will loop back until the chain is synced.
+      MessageData::BlockResponse { block } => {
+        println!("BlockRequest: {:?}", block);
+
+        self.chain
+          .lock()
+          .await
+          .add_block(block.clone())
+          .unwrap_or_else(|e| println!("{}", e));
+
+        let peer = self.get_random_peer()
+          .await
+          .unwrap();
+
+        self.send(&peer, &MessageData::BlockRequest {
+          index: (block.index as usize) + 1,
+        }).await;
+      },
+      _ => {
+        eprintln!("Unknown message.");
+      },
+    }
   }
 
   /**
@@ -193,7 +248,7 @@ impl Node {
   pub async fn send(&self, peer: &str, payload: &MessageData) {
     let message = Message {
       payload: payload.to_owned(),
-      sender: self.get_local_addr(),
+      sender: self.node_id.clone(),
     };
 
     let peers = self.peers.lock().await;

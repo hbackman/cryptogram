@@ -49,7 +49,7 @@ async fn handle_peer_connect(node: Arc<Node>, peer: &str) {
 
   println!("Connecting to {}", peer);
 
-  node.connect_to_peer(&peer).await;
+  let peer_id = node.connect_to_peer(&peer).await.unwrap();
 
   // Ask peer for its peers and blockchain.
   let chain_at = node.chain
@@ -57,8 +57,8 @@ async fn handle_peer_connect(node: Arc<Node>, peer: &str) {
     .await
     .len();
 
-  node.send(&peer, &MessageData::PeerDiscovery {}).await;
-  node.send(&peer, &MessageData::BlockRequest {index: chain_at + 1}).await;
+  node.send(&peer_id, &MessageData::PeerDiscovery {}).await;
+  node.send(&peer_id, &MessageData::BlockRequest {index: chain_at + 1}).await;
 }
 
 /**
