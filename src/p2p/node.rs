@@ -13,9 +13,10 @@ use uuid::Uuid;
 use crate::p2p::message::Message;
 use crate::p2p::message::MessageData;
 use crate::p2p::message::Handshake;
+use crate::p2p::peer::Peer;
 use crate::blockchain::chain::Blockchain;
 
-type Peer = UnboundedSender<Message>;
+// type Peer = UnboundedSender<Message>;
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -53,8 +54,9 @@ impl Node {
   /**
    * Connect to a peer using their address.
    */
-  pub async fn connect_to_peer(&self, peer: &str) -> Result<String, Box<dyn Error>> {
-    let stream = TcpStream::connect(peer).await?;
+  pub async fn connect_to_peer(&self, peer_addr: String) -> Result<String, Box<dyn Error>> {
+    let stream = TcpStream::connect(peer_addr).await?;
+    let addr = stream.peer_addr()?.to_string();
 
     let (
       mut reader,
@@ -67,6 +69,7 @@ impl Node {
 
     self.setup_peer(
       handshake.peer_id.clone(),
+      addr,
       reader,
       writer,
     ).await;
@@ -89,6 +92,7 @@ impl Node {
 
     self.setup_peer(
       handshake.peer_id,
+      handshake.addr,
       reader,
       writer,
     ).await;
@@ -99,24 +103,29 @@ impl Node {
   /**
    * Configure the communication channel for a peer.
    */
-  async fn setup_peer(&self, peer_id: String, reader: OwnedReadHalf, mut writer: OwnedWriteHalf) {
+  async fn setup_peer(&self, peer_name: String, peer_addr: String, reader: OwnedReadHalf, mut writer: OwnedWriteHalf) {
     let (tx, mut rx): (
       UnboundedSender<Message>,
       UnboundedReceiver<Message>,
     ) = unbounded_channel();
 
+    let peer = Peer::new(
+      peer_name.clone(),
+      peer_addr.clone(),
+      tx.clone(),
+    );
+
     self.peers
       .lock()
       .await
-      .insert(peer_id.clone(), tx.clone());
+      .insert(peer.peer_name.clone(), peer);
 
-    let peer_clone = peer_id.clone();
+    let peer_clone = peer_name.clone();
     let node_clone = self.clone();
 
     tokio::spawn(async move {
       while let Some(msg) = rx.recv().await {
         if let Ok(data) = serde_json::to_string(&msg) {
-
           writer.write_all(data.as_bytes()).await.unwrap();
           writer.write_all(b"\n").await.unwrap();
 
@@ -152,15 +161,24 @@ impl Node {
         println!("[{}] {}", message.sender, msg);
       },
       MessageData::PeerDiscovery {} => {
-        self.send(&message.sender, &MessageData::PeerGossip {
-          peers: self.get_peers().await,
-        }).await;
+        // self.send(&message.sender, &MessageData::PeerGossip {
+        //   peers: self.get_peers().await,
+        // }).await;
       },
-      // MessageData::PeerGossip { peers } => {
-      //   for peer in peers {
-      //     node.add_peer(&peer).await;
-      //   }
-      // },
+      MessageData::PeerGossip { peers } => {
+        println!("{:?}", peers);
+
+//        for peer in peers {
+//          self.connect_to_peer(
+//            peer.addr,
+//            Some(peer.name),
+//          ).await;
+//
+//          // if ! self.has_peer(&peer.name).await {
+//          //   let _ = self.connect_to_peer(&peer.addr).await;
+//          // }
+//        }
+      },
       MessageData::BlockchainTx { block } => {
         println!("BlockchainTx: {:?}", block);
 
@@ -213,6 +231,10 @@ impl Node {
    * Check if a peer exists.
    */
   pub async fn has_peer(&self, peer: &str) -> bool {
+    if peer == self.node_id {
+      return true;
+    }
+
     self.peers.lock().await.contains_key(peer)
   }
 
@@ -226,9 +248,9 @@ impl Node {
   /**
    * Retrieve the node peers.
    */
-  pub async fn get_peers(&self) -> Vec<String> {
+  pub async fn get_peers(&self) -> Vec<Peer> {
     self.peers.lock().await
-      .keys()
+      .values()
       .cloned()
       .collect()
   }
@@ -268,7 +290,7 @@ impl Node {
    */
   pub async fn yell(&self, payload: &MessageData) {
     for peer in self.get_peers().await {
-      self.send(&peer, payload).await;
+      self.send(&peer.peer_name, payload).await;
     }
   }
 
@@ -295,6 +317,7 @@ impl Node {
     let sending = Handshake {
       version: "1".to_string(),
       peer_id: self.node_id.clone(),
+      addr:    self.get_local_addr(),
     };
 
     // Send handshake

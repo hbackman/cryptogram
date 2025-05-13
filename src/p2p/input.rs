@@ -49,7 +49,11 @@ async fn handle_peer_connect(node: Arc<Node>, peer: &str) {
 
   println!("Connecting to {}", peer);
 
-  let peer_id = node.connect_to_peer(&peer).await.unwrap();
+  let peer_id = node.connect_to_peer(peer)
+    .await
+    .unwrap();
+
+  println!("Connected to: {}", peer_id);
 
   // Ask peer for its peers and blockchain.
   let chain_at = node.chain
@@ -65,13 +69,17 @@ async fn handle_peer_connect(node: Arc<Node>, peer: &str) {
  * Handle listing connected peers.
  */
 async fn handle_peer_listing(node: Arc<Node>) {
-  let peers = node.get_peers().await;
+  let peers = node.get_peers()
+    .await
+    .into_iter()
+    .map(|p| format!("{}: {}", p.peer_name, p.peer_addr))
+    .collect::<Vec<String>>();
 
   if peers.is_empty() {
     println!("No connected peers.");
   } else {
     println!("Connected peers:");
-    for peer in peers.iter() {
+    for peer in peers {
       println!("- {}", peer);
     }
   }

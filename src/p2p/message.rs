@@ -1,5 +1,6 @@
 use serde::{Serialize, Deserialize};
 use crate::blockchain::block::Block;
+use crate::p2p::peer::PeerInfo;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
@@ -12,7 +13,7 @@ pub enum MessageData {
   // Peers
   PeerDiscovery {},
   PeerGossip {
-    peers: Vec<String>
+    peers: Vec<PeerInfo>,
   },
   BlockchainTx {
     block: Block,
@@ -37,4 +38,5 @@ pub struct Handshake
 {
     pub version: String,
     pub peer_id: String,
+    pub addr:    String,
 }

@@ -2,13 +2,18 @@ use tokio::time::{sleep, Duration};
 use std::sync::Arc;
 use rand::seq::SliceRandom;
 use crate::p2p::node::Node;
+use crate::p2p::peer::PeerInfo;
 use crate::p2p::message::MessageData;
 
 pub async fn handle_peer_gossip(node: Arc<Node>) {
   loop {
     sleep(Duration::from_secs(10)).await; // Gossip every 10 seconds
 
-    let known_peers = node.get_peers().await;
+    let known_peers: Vec<PeerInfo> = node.get_peers()
+      .await
+      .into_iter()
+      .map(|p| p.info())
+      .collect();
 
     if known_peers.is_empty() {
       continue;
@@ -18,6 +23,7 @@ pub async fn handle_peer_gossip(node: Arc<Node>) {
     let gossip_targets: Vec<String> = known_peers
       .choose_multiple(&mut rand::thread_rng(), 3)
       .cloned()
+      .map(|p| p.name)
       .collect();
 
     // Create a gossip message

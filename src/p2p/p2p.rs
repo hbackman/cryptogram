@@ -16,9 +16,9 @@ use crate::p2p::message::MessageData;
 pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>, addr: String, peers: Vec<String>) {
   let node = Arc::new(Node::new(chain, addr).await);
 
-  for peer in peers.clone() {
-    let _ = node.connect_to_peer(&peer).await;
-  }
+  // for peer in peers.clone() {
+  //   let _ = node.connect_to_peer(&peer).await;
+  // }
 
   node.sync().await;
 
@@ -44,77 +44,8 @@ async fn handle_incoming_messages(node: Arc<Node>) {
  * Read messages from a connected peer.
  */
 async fn handle_client(node: Arc<Node>, stream: TcpStream) {
-  println!("incoming");
-
   let _ = node.handle_incoming(stream).await;
 }
-
-/**
- * Handle a peer message.
- */
-// async fn handle_message(node: Arc<Node>, message: Message) {
-//   match message.payload {
-//     MessageData::Chat { message: msg } => {
-//       println!("[{}] {}", message.sender, msg);
-//     },
-//     MessageData::PeerDiscovery {} => {
-//       node.send(&message.sender, &MessageData::PeerGossip {
-//         peers: node.get_peers().await,
-//       }).await;
-//     },
-//     MessageData::PeerGossip { peers } => {
-//       // for peer in peers {
-//       //   node.add_peer(&peer).await;
-//       // }
-//     },
-//     MessageData::BlockchainTx { block } => {
-//       println!("BlockchainTx: {:?}", block);
-//
-//       node.chain
-//         .lock()
-//         .await
-//         .add_block(block)
-//         .unwrap_or_else(|e| println!("{}", e));
-//     },
-//
-//     // When another node asks for a block, reply with the block at the index
-//     // which the node asked for.
-//     MessageData::BlockRequest { index } => {
-//       println!("BlockRequest: {:?}", index);
-//
-//       let block = node.chain
-//         .lock()
-//         .await
-//         .at(index);
-//
-//       if let Some(block) = block {
-//         node.send(&message.sender, &MessageData::BlockResponse { block }).await;
-//       }
-//     },
-//     // When receiving a block, add it to the chain and ask a random peer for
-//     // the next block. This will loop back until the chain is synced.
-//     MessageData::BlockResponse { block } => {
-//       println!("BlockRequest: {:?}", block);
-//
-//       node.chain
-//         .lock()
-//         .await
-//         .add_block(block.clone())
-//         .unwrap_or_else(|e| println!("{}", e));
-//
-//       let peer = node.get_random_peer()
-//         .await
-//         .unwrap();
-//
-//       node.send(&peer, &MessageData::BlockRequest {
-//         index: (block.index as usize) + 1,
-//       }).await;
-//     },
-//     _ => {
-//       eprintln!("Unknown message.");
-//     },
-//   }
-// }
 
 /**
  * Handle pending blocks in the mempool.
