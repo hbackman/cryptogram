@@ -19,10 +19,15 @@ struct Config {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
   let matches = cli().get_matches();
-  let config = get_config().unwrap();
+  let _config = get_config().unwrap();
   let chain = Blockchain::new_arc();
 
-  start_p2p(chain.clone()).await?;
+  let port: u16 = matches.get_one::<String>("p2p-port")
+    .unwrap()
+    .parse()
+    .unwrap_or(5000);
+
+  start_p2p(chain.clone(), port).await?;
 
   Ok(())
 

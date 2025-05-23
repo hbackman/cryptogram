@@ -10,8 +10,8 @@ use super::service::P2PCommand;
 /**
  * Start the p2p node.
  */
-pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>) -> Result<(), Box<dyn Error>> {
-  let mut p2p = P2PService::new("test-new").await?;
+pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>, port: u16) -> Result<(), Box<dyn Error>> {
+  let mut p2p = P2PService::new("test-new", port).await?;
 
   let mut stdin = io::BufReader::new(io::stdin()).lines();
 

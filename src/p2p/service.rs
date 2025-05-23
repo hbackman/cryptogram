@@ -47,7 +47,7 @@ pub struct P2PService {
 }
 
 impl P2PService {
-  pub async fn new(topic: &str) -> anyhow::Result<Self> {
+  pub async fn new(topic: &str, port: u16) -> anyhow::Result<Self> {
     let swarm = SwarmBuilder::with_new_identity()
       .with_tokio()
       .with_tcp(
@@ -92,6 +92,7 @@ impl P2PService {
     P2PService::run(
       swarm,
       topic,
+      port,
       cmd_rx,
       evt_tx,
     ).await?;
@@ -105,13 +106,14 @@ impl P2PService {
   async fn run(
     mut swarm:  libp2p::Swarm<CryptogramBehaviour>,
     topic:      libp2p::gossipsub::IdentTopic,
+    port:       u16,
     mut cmd_rx: Receiver<P2PCommand>,
     evt_tx:     Sender<P2PEvent>,
   ) -> anyhow::Result<()> {
     // subscribes to our topic
     swarm.behaviour_mut().gossipsub.subscribe(&topic)?;
-    // Listen on all interfaces and whatever port the OS assigns
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+    // Listen on all interfaces and specified port (0 = any available port)
+    swarm.listen_on(format!("/ip4/0.0.0.0/tcp/{}", port).parse()?)?;
 
     println!("Peer ID: {}", swarm.local_peer_id().to_string());
 
