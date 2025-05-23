@@ -29,8 +29,9 @@ pub enum MessageData {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Message
 {
-    pub sender: String,
-    pub payload: MessageData,
+  pub payload:  MessageData,
+  pub receiver: Option<String>,
+  pub sender:   Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

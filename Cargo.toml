@@ -23,3 +23,5 @@ byteorder = "1.5.0"
 rusqlite = "0.34.0"
 toml = "0.8.20"
 uuid = { version = "1.16.0", features = ["v4"] }
+libp2p = { version = "0.55.0", features = [ "tokio", "gossipsub", "mdns", "noise", "macros", "tcp", "yamux", "quic"] }
+anyhow = "1.0.98"

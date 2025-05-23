@@ -158,7 +158,7 @@ impl Node {
   async fn handle_message(&self, message: Message) {
     match message.payload {
       MessageData::Chat { message: msg } => {
-        println!("[{}] {}", message.sender, msg);
+        println!("[{}] {}", message.sender.unwrap(), msg);
       },
       MessageData::PeerDiscovery {} => {
         // self.send(&message.sender, &MessageData::PeerGossip {
@@ -199,7 +199,7 @@ impl Node {
           .at(index);
 
         if let Some(block) = block {
-          self.send(&message.sender, &MessageData::BlockResponse { block }).await;
+          self.send(&message.sender.unwrap(), &MessageData::BlockResponse { block }).await;
         }
       },
       // When receiving a block, add it to the chain and ask a random peer for
@@ -273,7 +273,8 @@ impl Node {
   pub async fn send(&self, peer: &str, payload: &MessageData) {
     let message = Message {
       payload: payload.to_owned(),
-      sender: self.node_id.clone(),
+      sender: Some(self.node_id.clone()),
+      receiver: Some(peer.to_string()),
     };
 
     let peers = self.peers.lock().await;

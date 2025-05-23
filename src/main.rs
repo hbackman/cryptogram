@@ -17,15 +17,19 @@ struct Config {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
   let matches = cli().get_matches();
   let config = get_config().unwrap();
   let chain = Blockchain::new_arc();
 
-  tokio::join!(
-    start_p2p(chain.clone(), get_p2p_addr(matches.clone()), config.peers),
-    start_api(chain.clone(), get_api_addr(matches.clone())),
-  );
+  start_p2p(chain.clone()).await?;
+
+  Ok(())
+
+  // tokio::join!(
+  //   start_p2p(chain.clone(), get_p2p_addr(matches.clone()), config.peers),
+  //   start_api(chain.clone(), get_api_addr(matches.clone())),
+  // );
 }
 
 fn get_p2p_addr(cli: ArgMatches) -> String {
