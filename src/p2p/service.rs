@@ -219,9 +219,6 @@ impl P2PService {
                 &String::from_utf8_lossy(&message.data)
               ).unwrap();
 
-              println!("msg: {:?}", msg);
-              println!("pid: {:?}", swarm.local_peer_id().to_string());
-
               // Message was sent to everyone.
               if msg.receiver == None {
                 let _ = evt_tx.send(P2PEvent::Message(peer_id, msg.clone())).await;
