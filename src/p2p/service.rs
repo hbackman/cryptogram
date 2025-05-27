@@ -8,7 +8,7 @@ use libp2p::futures::stream::StreamExt;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::PeerId;
 use libp2p::SwarmBuilder;
-use libp2p::gossipsub::{self, Topic};
+use libp2p::gossipsub;
 use libp2p::mdns;
 use libp2p::noise;
 use libp2p::tcp;
@@ -28,7 +28,7 @@ struct CryptogramBehaviour {
 
 #[derive(Debug)]
 pub enum P2PEvent {
-  Message(PeerId, MessageData),
+  Message(PeerId, Message),
   Discovered(PeerId),
   Expired(PeerId),
   ListenAddr(String),
@@ -191,29 +191,6 @@ impl P2PService {
                 swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer);
               }
             },
-            SwarmEvent::Behaviour(
-              CryptogramBehaviourEvent::Gossipsub(
-                gossipsub::Event::Message {
-                  propagation_source: peer_id,
-                  message_id: _id,
-                  message,
-                }
-              )
-            ) => {
-              let msg = serde_json::from_str::<Message>(
-                &String::from_utf8_lossy(&message.data)
-              ).unwrap();
-
-              // Message was sent to everyone.
-              if msg.receiver == None {
-                let _ = evt_tx.send(P2PEvent::Message(peer_id, msg.payload.clone())).await;
-              }
-
-              // Message was sent to specific peer.
-              if msg.receiver == Some(swarm.local_peer_id().to_string()) {
-                let _ = evt_tx.send(P2PEvent::Message(peer_id, msg.payload.clone())).await;
-              }
-            },
             SwarmEvent::NewListenAddr { address, .. } => {
               let _ = evt_tx.send(P2PEvent::ListenAddr(address.to_string())).await;
             },
@@ -228,6 +205,32 @@ impl P2PService {
               swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
 
               let _ = evt_tx.send(P2PEvent::Expired(peer_id)).await;
+            },
+            SwarmEvent::Behaviour(
+              CryptogramBehaviourEvent::Gossipsub(
+                gossipsub::Event::Message {
+                  propagation_source: peer_id,
+                  message_id: _id,
+                  message,
+                }
+              )
+            ) => {
+              let msg = serde_json::from_str::<Message>(
+                &String::from_utf8_lossy(&message.data)
+              ).unwrap();
+
+              println!("msg: {:?}", msg);
+              println!("pid: {:?}", swarm.local_peer_id().to_string());
+
+              // Message was sent to everyone.
+              if msg.receiver == None {
+                let _ = evt_tx.send(P2PEvent::Message(peer_id, msg.clone())).await;
+              }
+
+              // Message was sent to specific peer.
+              if msg.receiver == Some(swarm.local_peer_id().to_string()) {
+                let _ = evt_tx.send(P2PEvent::Message(peer_id, msg.clone())).await;
+              }
             },
             _ => {}
           }

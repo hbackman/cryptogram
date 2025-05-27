@@ -12,6 +12,7 @@ use p2p::p2p::start_p2p;
 use api::api::start_api;
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct Config {
   peers: Vec<String>,
 }
@@ -19,7 +20,7 @@ struct Config {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
   let matches = cli().get_matches();
-  let _config = get_config().unwrap();
+  let _config = get_config()?;
   let chain = Blockchain::new_arc();
 
   let port: u16 = matches.get_one::<String>("p2p-port")
@@ -27,19 +28,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     .parse()
     .unwrap_or(5000);
 
-  start_p2p(chain.clone(), port).await?;
+  tokio::join!(
+    start_p2p(chain.clone(), port),
+    start_api(chain.clone(), get_api_addr(matches.clone()))
+  );
 
   Ok(())
-
-  // tokio::join!(
-  //   start_p2p(chain.clone(), get_p2p_addr(matches.clone()), config.peers),
-  //   start_api(chain.clone(), get_api_addr(matches.clone())),
-  // );
 }
 
-fn get_p2p_addr(cli: ArgMatches) -> String {
-  format!("0.0.0.0:{}", cli.get_one::<String>("p2p-port").unwrap())
-}
+// fn get_p2p_addr(cli: ArgMatches) -> String {
+//   format!("0.0.0.0:{}", cli.get_one::<String>("p2p-port").unwrap())
+// }
 
 fn get_api_addr(cli: ArgMatches) -> String {
   format!("0.0.0.0:{}", cli.get_one::<String>("api-port").unwrap())

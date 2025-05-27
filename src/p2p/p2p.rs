@@ -1,8 +1,11 @@
 use tokio::sync::Mutex;
 use std::sync::Arc;
-use std::error::Error;
+use std::thread::sleep;
+use std::time::Duration;
 use tokio::{io, io::AsyncBufReadExt, select};
 use crate::blockchain::chain::Blockchain;
+use crate::blockchain::block::{Block, PendingBlock};
+use crate::p2p::message::Message;
 use crate::p2p::message::MessageData;
 use crate::p2p::service::{P2PService, P2PEvent};
 use super::service::P2PCommand;
@@ -10,21 +13,57 @@ use super::service::P2PCommand;
 /**
  * Start the p2p node.
  */
-pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>, port: u16) -> Result<(), Box<dyn Error>> {
-  let mut p2p = P2PService::new("test-new", port).await?;
+pub async fn start_p2p(chain: Arc<Mutex<Blockchain>>, port: u16) {
+  let mut p2p = P2PService::new("test-new", port)
+    .await
+    .unwrap();
 
   let mut stdin = io::BufReader::new(io::stdin()).lines();
 
   loop {
     select! {
-      Ok(Some(line)) = stdin.next_line() => {
-        handle_input(chain.clone(), &p2p, line).await;
+      Some(block) = next_mpool_block(chain.clone()) => {
+        handle_block(chain.clone(), &p2p, block).await;
       },
       Some(event) = p2p.next_event() => {
         handle_event(chain.clone(), &p2p, event).await;
-      }
+      },
+      Ok(Some(line)) = stdin.next_line() => {
+        handle_input(chain.clone(), &p2p, line).await;
+      },
     }
   }
+}
+
+async fn next_mpool_block(chain: Arc<Mutex<Blockchain>>) -> Option<PendingBlock> {
+  let mut chain = chain
+    .lock()
+    .await;
+  chain.mpool.pop()
+}
+
+async fn handle_block(chain: Arc<Mutex<Blockchain>>, p2p: &P2PService, pending_block: PendingBlock) {
+  println!("Processing block");
+
+  let mut chain = chain.lock().await;
+  let mut block = Block::next(
+    &chain.top_block(),
+    pending_block.data
+  );
+
+  block.timestamp  = pending_block.timestamp;
+  block.signature  = pending_block.signature;
+  block.public_key = pending_block.public_key;
+
+  block.mine_block();
+  chain.add_block(block.clone())
+    .unwrap_or_else(|e| println!("{}", e));
+
+  println!("Processed block: {:?}", block);
+
+  let _ = p2p.yell(MessageData::BlockchainTx {
+    block,
+  }).await;
 }
 
 async fn handle_input(chain: Arc<Mutex<Blockchain>>, p2p: &P2PService, input: String) {
@@ -67,6 +106,16 @@ async fn handle_event(chain: Arc<Mutex<Blockchain>>, p2p: &P2PService, event: P2
     }
     P2PEvent::Discovered(peer) => {
       eprintln!("Found peer: {}", peer);
+
+      // I don't know why it's not connected yet.
+      sleep(Duration::from_millis(100));
+
+      let chain_at = chain
+        .lock()
+        .await
+        .len();
+
+      let _ = p2p.send(&peer.to_string(), MessageData::BlockRequest { index: chain_at + 1 }).await;
     }
     P2PEvent::ListenAddr(addr) => {
       println!("Listening on {}", addr);
@@ -75,8 +124,8 @@ async fn handle_event(chain: Arc<Mutex<Blockchain>>, p2p: &P2PService, event: P2
   }
 }
 
-async fn handle_message(chain: Arc<Mutex<Blockchain>>, _p2p: &P2PService, message: MessageData) {
-  match message {
+async fn handle_message(chain: Arc<Mutex<Blockchain>>, p2p: &P2PService, message: Message) {
+  match message.payload {
     MessageData::Chat {message} => {
       println!("message: {}", message);
     },
@@ -92,14 +141,23 @@ async fn handle_message(chain: Arc<Mutex<Blockchain>>, _p2p: &P2PService, messag
     MessageData::BlockRequest { index } => {
       println!("BlockRequest: {:?}", index);
 
-      // let block = chain
-      //   .lock()
-      //   .await
-      //   .at(index);
+      let block = chain
+        .lock()
+        .await
+        .at(index);
 
-      // if let Some(block) = block {
-      //   self.send(&message.sender, &MessageData::BlockResponse { block }).await;
-      // }
+      if let Some(block) = block {
+        let _ = p2p.send(&message.sender.unwrap(), MessageData::BlockResponse { block }).await;
+      }
+    },
+    MessageData::BlockResponse { block } => {
+      println!("BlockResponse: {:?}", block);
+
+      chain
+        .lock()
+        .await
+        .add_block(block.clone())
+        .unwrap_or_else(|e| println!("{}", e));
     },
     _ => {}
   }
@@ -118,11 +176,10 @@ async fn handle_chain_listing(chain: Arc<Mutex<Blockchain>>) {
 // /**
 //  * Handle pending blocks in the mempool.
 //  */
-// pub async fn handle_mempool_blocks(node: Arc<Node>) {
+// pub async fn handle_mempool_blocks(chain: Arc<Mutex<Blockchain>>, p2p: &P2PService) {
 //   loop {
 //     let block = {
-//       let mut chain = node
-//         .chain
+//       let mut chain = chain
 //         .lock()
 //         .await;
 //       chain.mpool.pop()
@@ -133,7 +190,7 @@ async fn handle_chain_listing(chain: Arc<Mutex<Blockchain>>) {
 //     if let Some(pending_block) = block {
 //       println!("Processing block");
 //
-//       let mut chain = node.chain.lock().await;
+//       let mut chain = chain.lock().await;
 //       let mut block = Block::next(
 //         &chain.top_block(),
 //         pending_block.data
@@ -149,7 +206,7 @@ async fn handle_chain_listing(chain: Arc<Mutex<Blockchain>>) {
 //
 //       println!("Processed block: {:?}", block);
 //
-//       node.yell(&MessageData::BlockchainTx {
+//       p2p.yell(MessageData::BlockchainTx {
 //         block,
 //       }).await;
 //     }
