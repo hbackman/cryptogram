@@ -182,8 +182,6 @@ impl P2PService {
             ) => {
               for (peer, _multiaddr) in list {
                 swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer);
-
-                let _ = evt_tx.send(P2PEvent::Discovered(peer)).await;
               }
             },
             SwarmEvent::Behaviour(
@@ -191,8 +189,6 @@ impl P2PService {
             ) => {
               for (peer, _multiaddr) in list {
                 swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer);
-
-                let _ = evt_tx.send(P2PEvent::Expired(peer)).await;
               }
             },
             SwarmEvent::Behaviour(
@@ -220,6 +216,18 @@ impl P2PService {
             },
             SwarmEvent::NewListenAddr { address, .. } => {
               let _ = evt_tx.send(P2PEvent::ListenAddr(address.to_string())).await;
+            },
+            // direct
+            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+              swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+
+              let _ = evt_tx.send(P2PEvent::Discovered(peer_id)).await;
+            },
+            // direct
+            SwarmEvent::ConnectionClosed { peer_id, .. } => {
+              swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+
+              let _ = evt_tx.send(P2PEvent::Expired(peer_id)).await;
             },
             _ => {}
           }
