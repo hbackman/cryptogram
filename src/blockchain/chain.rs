@@ -36,7 +36,19 @@ impl Blockchain {
   }
 
   fn genesis() -> Block {
-    Block::new(BlockData::Genesis {}, 0, "0".to_string())
+    let mut block = Block {
+      index:      0,
+      timestamp:  0,
+      nonce:      0,
+      data:       BlockData::Genesis {},
+      prev_hash:  "0".to_string(),
+      hash:       String::new(),
+      public_key: "".to_string(),
+      signature:  "".to_string(),
+    };
+
+    block.hash = block.hash_block();
+    block
   }
 
   /**
