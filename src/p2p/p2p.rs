@@ -158,6 +158,10 @@ async fn handle_message(chain: Arc<Mutex<Blockchain>>, p2p: &P2PService, message
         .await
         .add_block(block.clone())
         .unwrap_or_else(|e| println!("{}", e));
+
+      let _ = p2p.send(&message.sender.unwrap(), MessageData::BlockRequest {
+        index: block.index as usize + 1
+      }).await;
     },
     _ => {}
   }
